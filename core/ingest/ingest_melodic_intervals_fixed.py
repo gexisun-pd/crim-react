@@ -106,15 +106,15 @@ def extract_melodic_intervals_from_piece(file_path: str, piece_id: int) -> Optio
         print(f"  Notes DataFrame shape: {notes_df.shape}")
         
         # Extract melodic intervals using the piece object
-        # Use end=False to associate intervals with the first note of the pair
-        # According to CRIM documentation: end=False associates intervals with the onset of the first note
+        # Use end=True to associate intervals with the second note of the pair (default behavior)
+        # According to CRIM documentation: end=True associates intervals with the onset of the second note
         try:
-            melodic_intervals_df = piece.melodic(end=False)
+            melodic_intervals_df = piece.melodic(end=True)
         except Exception as e:
-            print(f"  Error with piece.melodic(end=False): {e}")
-            print(f"  Trying direct call to piece.melodic(end=False) from fresh corpus...")
+            print(f"  Error with piece.melodic(end=True): {e}")
+            print(f"  Trying direct call to piece.melodic(end=True) from fresh corpus...")
             # Try getting melodic intervals directly without cached dataframes
-            melodic_intervals_df = piece.melodic(end=False)
+            melodic_intervals_df = piece.melodic(end=True)
         
         if melodic_intervals_df.empty:
             print(f"  Warning: No melodic intervals found in {file_path}")

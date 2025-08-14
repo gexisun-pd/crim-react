@@ -18,46 +18,6 @@ except ImportError:
     print("Please install crim_intervals")
     CRIM_INTERVALS_AVAILABLE = False
 
-def parse_crim_interval_to_semitones(interval_str: str) -> Optional[float]:
-    """Convert CRIM interval notation to semitones"""
-    if not interval_str or interval_str in ['Rest', 'NaN', '']:
-        return None
-    
-    # Handle negative (descending) intervals
-    is_descending = interval_str.startswith('-')
-    if is_descending:
-        interval_str = interval_str[1:]  # Remove the minus sign
-    
-    # CRIM interval mappings to semitones
-    interval_map = {
-        # Perfect intervals
-        'P1': 0, 'P4': 5, 'P5': 7, 'P8': 12, 'P11': 17, 'P12': 19, 'P15': 24,
-        
-        # Major intervals
-        'M2': 2, 'M3': 4, 'M6': 9, 'M7': 11, 'M9': 14, 'M10': 16, 'M13': 21, 'M14': 23,
-        
-        # Minor intervals
-        'm2': 1, 'm3': 3, 'm6': 8, 'm7': 10, 'm9': 13, 'm10': 15, 'm13': 20, 'm14': 22,
-        
-        # Augmented intervals
-        'A1': 1, 'A2': 3, 'A3': 5, 'A4': 6, 'A5': 8, 'A6': 10, 'A7': 12,
-        
-        # Diminished intervals
-        'd1': -1, 'd2': 0, 'd3': 2, 'd4': 4, 'd5': 6, 'd6': 7, 'd7': 9, 'd8': 11,
-        
-        # Other common intervals
-        'TT': 6,  # Tritone
-    }
-    
-    semitones = interval_map.get(interval_str)
-    
-    if semitones is not None:
-        return -semitones if is_descending else semitones
-    else:
-        # Try to parse unknown format
-        print(f"    Warning: Unknown interval format '{interval_str}', setting to None")
-        return None
-
 def extract_melodic_intervals_from_piece(file_path: str, piece_id: int) -> Optional[List[Dict]]:
     """Extract melodic intervals from a piece using cached CRIM DataFrames"""
     if not CRIM_INTERVALS_AVAILABLE:
@@ -106,15 +66,15 @@ def extract_melodic_intervals_from_piece(file_path: str, piece_id: int) -> Optio
         print(f"  Notes DataFrame shape: {notes_df.shape}")
         
         # Extract melodic intervals using the piece object
-        # Use end=False to associate intervals with the first note of the pair
-        # According to CRIM documentation: end=False associates intervals with the onset of the first note
+        # Use end=True to associate intervals with the second note of the pair (default behavior)
+        # According to CRIM documentation: end=True associates intervals with the onset of the second note
         try:
-            melodic_intervals_df = piece.melodic(end=False)
+            melodic_intervals_df = piece.melodic(end=True)
         except Exception as e:
-            print(f"  Error with piece.melodic(end=False): {e}")
-            print(f"  Trying direct call to piece.melodic(end=False) from fresh corpus...")
+            print(f"  Error with piece.melodic(end=True): {e}")
+            print(f"  Trying direct call to piece.melodic(end=True) from fresh corpus...")
             # Try getting melodic intervals directly without cached dataframes
-            melodic_intervals_df = piece.melodic(end=False)
+            melodic_intervals_df = piece.melodic(end=True)
         
         if melodic_intervals_df.empty:
             print(f"  Warning: No melodic intervals found in {file_path}")
@@ -256,6 +216,86 @@ def convert_melodic_intervals_to_list(intervals_df, piece_id: int) -> List[Dict]
     
     print(f"  Converted to {len(intervals_list)} melodic interval records")
     return intervals_list
+
+def parse_crim_interval_to_semitones(interval_str: str) -> Optional[float]:
+    """Convert CRIM interval notation to semitones"""
+    if not interval_str or interval_str in ['Rest', 'NaN', '']:
+        return None
+    
+    # Handle negative (descending) intervals
+    is_descending = interval_str.startswith('-')
+    if is_descending:
+        interval_str = interval_str[1:]  # Remove the minus sign
+    
+    # CRIM interval mappings to semitones
+    interval_map = {
+        # Perfect intervals
+        'P1': 0, 'P4': 5, 'P5': 7, 'P8': 12, 'P11': 17, 'P12': 19, 'P15': 24,
+        
+        # Major intervals
+        'M2': 2, 'M3': 4, 'M6': 9, 'M7': 11, 'M9': 14, 'M10': 16, 'M13': 21, 'M14': 23,
+        
+        # Minor intervals
+        'm2': 1, 'm3': 3, 'm6': 8, 'm7': 10, 'm9': 13, 'm10': 15, 'm13': 20, 'm14': 22,
+        
+        # Augmented intervals
+        'A1': 1, 'A2': 3, 'A3': 5, 'A4': 6, 'A5': 8, 'A6': 10, 'A7': 12,
+        
+        # Diminished intervals
+        'd1': -1, 'd2': 0, 'd3': 2, 'd4': 4, 'd5': 6, 'd6': 7, 'd7': 9, 'd8': 11,
+        
+        # Other common intervals
+        'TT': 6,  # Tritone
+    }
+    
+    semitones = interval_map.get(interval_str)
+    
+    if semitones is not None:
+        return -semitones if is_descending else semitones
+    else:
+    
+    print(f"  Converted to {len(intervals_list)} melodic interval records")
+    return intervals_list
+
+def parse_crim_interval_to_semitones(interval_str: str) -> Optional[float]:
+    """Convert CRIM interval notation to semitones"""
+    if not interval_str or interval_str in ['Rest', 'NaN', '']:
+        return None
+    
+    # Handle negative (descending) intervals
+    is_descending = interval_str.startswith('-')
+    if is_descending:
+        interval_str = interval_str[1:]  # Remove the minus sign
+    
+    # CRIM interval mappings to semitones
+    interval_map = {
+        # Perfect intervals
+        'P1': 0, 'P4': 5, 'P5': 7, 'P8': 12, 'P11': 17, 'P12': 19, 'P15': 24,
+        
+        # Major intervals
+        'M2': 2, 'M3': 4, 'M6': 9, 'M7': 11, 'M9': 14, 'M10': 16, 'M13': 21, 'M14': 23,
+        
+        # Minor intervals
+        'm2': 1, 'm3': 3, 'm6': 8, 'm7': 10, 'm9': 13, 'm10': 15, 'm13': 20, 'm14': 22,
+        
+        # Augmented intervals
+        'A1': 1, 'A2': 3, 'A3': 5, 'A4': 6, 'A5': 8, 'A6': 10, 'A7': 12,
+        
+        # Diminished intervals
+        'd1': -1, 'd2': 0, 'd3': 2, 'd4': 4, 'd5': 6, 'd6': 7, 'd7': 9, 'd8': 11,
+        
+        # Other common intervals
+        'TT': 6,  # Tritone
+    }
+    
+    semitones = interval_map.get(interval_str)
+    
+    if semitones is not None:
+        return -semitones if is_descending else semitones
+    else:
+        # Try to parse unknown format
+        print(f"    Warning: Unknown interval format '{interval_str}', setting to None")
+        return None
 
 def create_melodic_intervals_table():
     """Create a table for storing melodic intervals in the database"""

@@ -242,7 +242,19 @@ if __name__ == "__main__":
     
     test_note_matching()
     
-    # Additional specific test
+    # Additional specific test - use the first piece from database
     print(f"\n" + "=" * 60)
     print("🎯 Testing specific case:")
-    test_matching_algorithm(piece_id=22, voice=1, onset=0.0)
+    
+    # Get the first piece from database for testing
+    db = PiecesDB()
+    pieces = db.get_all_pieces()
+    if pieces:
+        test_piece = pieces[0]
+        test_piece_id = test_piece['piece_id']
+        test_voice = 1  # Use voice 1
+        test_onset = 0.0  # Use onset 0.0
+        print(f"Using piece {test_piece_id}: {test_piece['filename']}")
+        test_matching_algorithm(piece_id=test_piece_id, voice=test_voice, onset=test_onset)
+    else:
+        print("No pieces found in database")
