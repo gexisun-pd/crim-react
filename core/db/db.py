@@ -157,15 +157,16 @@ class PiecesDB:
                 try:
                     cursor.execute("""
                         INSERT INTO notes (
-                            piece_id, voice, voice_name, onset, duration, measure, beat, 
+                            piece_id, voice, voice_name, onset, duration, offset, measure, beat, 
                             pitch, name, step, octave, `alter`, type, staff, tie
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         note_data['piece_id'],
                         note_data.get('voice'),
                         note_data.get('voice_name'),
                         note_data.get('onset'),
                         note_data.get('duration'),
+                        note_data.get('offset'),
                         note_data.get('measure'),
                         note_data.get('beat'),
                         note_data.get('pitch'),

@@ -219,6 +219,7 @@ def convert_notes_with_details_to_list(notes_df, durations_df, piece_id: int) ->
                 'voice_name': voice_name,  # Store the voice name from CRIM (e.g., "Cantus", "Altus")
                 'onset': float(offset),
                 'duration': duration,
+                'offset': float(offset) + float(duration),
                 'measure': int(measure) if measure is not None and pd.notna(measure) else None,
                 'beat': float(beat) if beat is not None and pd.notna(beat) else None,
                 'pitch': pitch,
@@ -230,7 +231,6 @@ def convert_notes_with_details_to_list(notes_df, durations_df, piece_id: int) ->
                 'staff': voice_idx,
                 'tie': None  # We'll implement tie detection later if needed
             }
-            
             notes_list.append(note_data)
     
     print(f"  Converted to {len(notes_list)} individual note records")

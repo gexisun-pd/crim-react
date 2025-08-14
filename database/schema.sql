@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS notes (
 	voice_name TEXT,                 -- 声部名称 (Cantus, Altus, Tenor, Bassus, etc.)
 	onset REAL,                      -- 音符开始时间，以四分音符为单位 (CRIM: offset)
 	duration REAL,                   -- 音符时长，以四分音符为单位 (CRIM: duration)
+	offset REAL,                     -- 音符结束时间 onset+duration
 	measure INTEGER,                 -- 小节号 (CRIM: measure)
 	beat REAL,                       -- 拍位 (CRIM: beat)
 	pitch INTEGER,                   -- MIDI音高数字 (CRIM: pitch)
