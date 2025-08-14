@@ -1,0 +1,10 @@
+-- Table: pieces
+CREATE TABLE IF NOT EXISTS pieces (
+	piece_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	path TEXT NOT NULL,
+	filename TEXT NOT NULL,
+	title TEXT,
+	composer TEXT,
+	sha256 TEXT,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
