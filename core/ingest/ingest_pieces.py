@@ -8,6 +8,15 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from db.db import PiecesDB
 
+# Import crim_intervals for metadata extraction
+try:
+    import crim_intervals
+    from crim_intervals import importScore
+    CRIM_INTERVALS_AVAILABLE = True
+except ImportError:
+    print("Warning: crim_intervals not available. Falling back to filename-based extraction.")
+    CRIM_INTERVALS_AVAILABLE = False
+
 def calculate_sha256(file_path: str) -> str:
     """Calculate SHA256 hash of a file"""
     try:
@@ -21,8 +30,24 @@ def calculate_sha256(file_path: str) -> str:
         return None
 
 def extract_title(file_path: str) -> str:
-    """Extract title from filename (basic implementation)"""
-    # Remove extension and clean up filename
+    """Extract title from file using crim_intervals metadata or filename fallback"""
+    if CRIM_INTERVALS_AVAILABLE:
+        try:
+            # Use crim_intervals to get metadata
+            piece = importScore(file_path)
+            metadata = piece.metadata
+            
+            # Try to get title from metadata
+            if 'title' in metadata and metadata['title']:
+                return metadata['title']
+            elif 'movementName' in metadata and metadata['movementName']:
+                return metadata['movementName']
+            elif 'workTitle' in metadata and metadata['workTitle']:
+                return metadata['workTitle']
+        except Exception as e:
+            print(f"Warning: Could not extract title from {file_path} using crim_intervals: {e}")
+    
+    # Fallback to filename-based extraction
     filename = os.path.basename(file_path)
     title = os.path.splitext(filename)[0]
     
@@ -35,7 +60,27 @@ def extract_title(file_path: str) -> str:
     return title
 
 def extract_composer(file_path: str) -> str:
-    """Extract composer from filename (basic implementation)"""
+    """Extract composer from file using crim_intervals metadata or filename fallback"""
+    if CRIM_INTERVALS_AVAILABLE:
+        try:
+            # Use crim_intervals to get metadata
+            piece = importScore(file_path)
+            metadata = piece.metadata
+            
+            # Try to get composer from metadata
+            if 'composer' in metadata and metadata['composer']:
+                return metadata['composer']
+            elif 'creators' in metadata and metadata['creators']:
+                # Handle multiple creators if needed
+                creators = metadata['creators']
+                if isinstance(creators, list) and len(creators) > 0:
+                    return creators[0]
+                elif isinstance(creators, str):
+                    return creators
+        except Exception as e:
+            print(f"Warning: Could not extract composer from {file_path} using crim_intervals: {e}")
+    
+    # Fallback to filename-based extraction
     filename = os.path.basename(file_path)
     
     # Try to extract composer from filename pattern
