@@ -103,7 +103,16 @@ def extract_notes_from_piece(file_path: str, piece_id: int) -> Optional[List[Dic
         raise
 
 def convert_notes_with_details_to_list(notes_df, durations_df, piece_id: int) -> List[Dict]:
-    """Convert notes DataFrame with detail index to list of dictionaries"""
+    """Convert notes DataFrame with detail index to list of dictionaries
+    
+    Args:
+        notes_df: DataFrame from piece.detailIndex(piece.notes(), measure=True, beat=True, offset=True)
+        durations_df: DataFrame from piece.durations()
+        piece_id: ID of the piece in the database
+    
+    Returns:
+        List of note dictionaries for database insertion
+    """
     notes_list = []
     
     print(f"  Converting notes DataFrame to list...")
@@ -188,7 +197,7 @@ def convert_notes_with_details_to_list(notes_df, durations_df, piece_id: int) ->
                         alter = 0
                         if '#' in note_str:
                             alter = 1
-                        elif 'b' in note_str:
+                        elif 'b' in note_str or '♭' in note_str:
                             alter = -1
                         
                         # Extract octave
@@ -207,6 +216,7 @@ def convert_notes_with_details_to_list(notes_df, durations_df, piece_id: int) ->
             note_data = {
                 'piece_id': piece_id,
                 'voice': voice_idx,
+                'voice_name': voice_name,  # Store the voice name from CRIM (e.g., "Cantus", "Altus")
                 'onset': float(offset),
                 'duration': duration,
                 'measure': int(measure) if measure is not None and pd.notna(measure) else None,
@@ -225,264 +235,7 @@ def convert_notes_with_details_to_list(notes_df, durations_df, piece_id: int) ->
     
     print(f"  Converted to {len(notes_list)} individual note records")
     return notes_list
-    """Convert notes DataFrame and durations DataFrame to list of dictionaries"""
-    notes_list = []
-    
-    # Get column names that represent voice parts (exclude measure, beat, offset columns)
-    metadata_cols = ['Measure', 'Beat', 'Offset', 'Composer', 'Title', 'Date']
-    voice_columns = [col for col in notes_df.columns if col not in metadata_cols]
-    
-    print(f"  Voice columns found: {voice_columns}")
-    
-    for index, row in notes_df.iterrows():
-        # Extract measure, beat, and offset information
-        measure = None
-        beat = None
-        offset = index
-        
-        # Check if we have measure/beat information in the DataFrame
-        if 'Measure' in notes_df.columns:
-            measure = row.get('Measure')
-        if 'Beat' in notes_df.columns:
-            beat = row.get('Beat')
-        if 'Offset' in notes_df.columns:
-            offset = row.get('Offset')
-        elif isinstance(notes_df.index, pd.MultiIndex):
-            # Handle multi-index case
-            if 'Offset' in notes_df.index.names:
-                offset = index[notes_df.index.names.index('Offset')]
-        
-        # Get duration for this offset from durations_df
-        duration = None
-        if offset in durations_df.index:
-            # Find the duration at this offset for any voice
-            duration_row = durations_df.loc[offset]
-            # Get the first non-null duration value
-            if isinstance(duration_row, pd.Series):
-                for voice_col in voice_columns:
-                    if voice_col in duration_row and pd.notna(duration_row[voice_col]):
-                        duration = float(duration_row[voice_col])
-                        break
-        
-        # Process each voice part
-        for voice_idx, voice_name in enumerate(voice_columns, 1):
-            note_value = row[voice_name]
-            
-            # Skip NaN values and empty cells
-            if pd.isna(note_value) or note_value == '':
-                continue
-            
-            # Parse note information
-            note_type = "Rest" if str(note_value).strip() == "Rest" else "Note"
-            
-            # Extract pitch information if it's a note
-            pitch = None
-            name = None
-            step = None
-            octave = None
-            alter = None
-            
-            if note_type == "Note" and str(note_value) != "Rest":
-                try:
-                    # Parse note name using our helper function
-                    pitch, step, octave, alter = parse_note_name(str(note_value).strip())
-                    name = str(note_value).strip()
-                except Exception:
-                    # If parsing fails, just store the original value
-                    name = str(note_value)
-            else:
-                name = "Rest"
-            
-            note_data = {
-                'piece_id': piece_id,
-                'voice': voice_idx,  # Use numeric voice index
-                'onset': float(offset) if offset is not None else 0.0,
-                'duration': duration if duration is not None else 1.0,  # Default to 1.0 if no duration found
-                'measure': int(measure) if measure is not None and pd.notna(measure) else None,
-                'beat': float(beat) if beat is not None and pd.notna(beat) else None,
-                'pitch': pitch,
-                'name': name,
-                'step': step,
-                'octave': octave,
-                'alter': alter,
-                'type': note_type,
-                'staff': voice_idx,  # Assume staff equals voice
-                'tie': None  # Not available in basic notes()
-            }
-            
-            notes_list.append(note_data)
-    
-    return notes_list
 
-def convert_notes_df_to_list_with_detail(notes_df, piece_id: int) -> List[Dict]:
-    """Convert notes DataFrame with detailIndex to list of dictionaries"""
-    notes_list = []
-    
-    # Get column names that represent voice parts (exclude measure, beat, offset columns)
-    voice_columns = [col for col in notes_df.columns if col not in ['Measure', 'Beat', 'Offset']]
-    
-    for index, row in notes_df.iterrows():
-        # Extract measure, beat, and offset information from the index or columns
-        if isinstance(notes_df.index, pd.MultiIndex):
-            # If multi-index, extract from index
-            if 'Measure' in notes_df.index.names:
-                measure = index[notes_df.index.names.index('Measure')] if 'Measure' in notes_df.index.names else None
-            else:
-                measure = None
-            if 'Beat' in notes_df.index.names:
-                beat = index[notes_df.index.names.index('Beat')] if 'Beat' in notes_df.index.names else None
-            else:
-                beat = None
-            if 'Offset' in notes_df.index.names:
-                offset = index[notes_df.index.names.index('Offset')] if 'Offset' in notes_df.index.names else index
-            else:
-                offset = index
-        else:
-            # If single index, offset is the index, and measure/beat might be in columns
-            offset = index
-            measure = row.get('Measure') if 'Measure' in notes_df.columns else None
-            beat = row.get('Beat') if 'Beat' in notes_df.columns else None
-        
-        # Process each voice part
-        for voice_name in voice_columns:
-            note_value = row[voice_name]
-            
-            # Skip NaN values and empty cells
-            if pd.isna(note_value) or note_value == '':
-                continue
-            
-            # Parse note information
-            note_type = "Rest" if str(note_value).strip() == "Rest" else "Note"
-            
-            # Extract pitch information if it's a note
-            pitch = None
-            name = None
-            step = None
-            octave = None
-            alter = None
-            
-            if note_type == "Note" and str(note_value) != "Rest":
-                try:
-                    # Basic parsing - CRIM might give us note names like "A4", "C#5", etc.
-                    note_str = str(note_value).strip()
-                    name = note_str
-                    
-                    # Try to extract basic pitch information
-                    if len(note_str) >= 2:
-                        step = note_str[0].upper()
-                        
-                        # Look for octave (usually the last character)
-                        if note_str[-1].isdigit():
-                            octave = int(note_str[-1])
-                        
-                        # Look for accidentals
-                        if '#' in note_str:
-                            alter = 1
-                        elif 'b' in note_str or '♭' in note_str:
-                            alter = -1
-                        else:
-                            alter = 0
-                            
-                        # Calculate approximate MIDI pitch if we have step and octave
-                        if step and octave is not None:
-                            step_values = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
-                            if step in step_values:
-                                pitch = (octave + 1) * 12 + step_values[step] + (alter or 0)
-                
-                except Exception:
-                    # If parsing fails, just store the original value
-                    name = str(note_value)
-            
-            note_data = {
-                'piece_id': piece_id,
-                'voice': voice_name,  # Use voice name instead of number for now
-                'onset': float(offset) if offset is not None else 0.0,
-                'duration': None,  # We'll need to calculate this separately or get from durations()
-                'measure': int(measure) if measure is not None and pd.notna(measure) else None,
-                'beat': float(beat) if beat is not None and pd.notna(beat) else None,
-                'pitch': pitch,
-                'name': name,
-                'step': step,
-                'octave': octave,
-                'alter': alter,
-                'type': note_type,
-                'staff': None,  # Not available in basic notes()
-                'tie': None  # Not available in basic notes()
-            }
-            
-            notes_list.append(note_data)
-    
-    return notes_list
-
-def convert_notes_df_to_list(notes_df, piece_id: int) -> List[Dict]:
-    """Convert notes DataFrame to list of dictionaries
-    
-    CRIM notes() returns a DataFrame where:
-    - Each column represents a voice/part (e.g., 'Cantus', 'Altus', etc.)
-    - Each row represents a time offset
-    - Values are note names (e.g., 'A4', 'Rest') or NaN for no note
-    """
-    notes_list = []
-    note_id = 1
-    
-    # Get metadata columns (if present)
-    metadata_cols = ['Composer', 'Title', 'Date']
-    voice_cols = [col for col in notes_df.columns if col not in metadata_cols]
-    
-    print(f"  Voice columns found: {voice_cols}")
-    
-    for offset, row in notes_df.iterrows():
-        for voice_num, voice_name in enumerate(voice_cols, 1):
-            note_value = row[voice_name]
-            
-            # Skip NaN values and empty cells
-            if pd.isna(note_value) or note_value == '':
-                continue
-            
-            # Parse the note value
-            if note_value == 'Rest':
-                note_type = 'Rest'
-                pitch = None
-                name = 'Rest'
-                step = None
-                octave = None
-                alter = None
-            else:
-                note_type = 'Note'
-                name = str(note_value)
-                
-                # Parse note name to extract pitch information
-                # Examples: 'A4', 'C#5', 'Bb3'
-                try:
-                    pitch, step, octave, alter = parse_note_name(name)
-                except:
-                    # If parsing fails, use defaults
-                    pitch = None
-                    step = name[0] if name else None
-                    octave = None
-                    alter = None
-            
-            note_data = {
-                'piece_id': piece_id,
-                'voice': voice_num,  # Use numeric voice number
-                'onset': float(offset),  # CRIM uses offset as the index
-                'duration': 1.0,  # Default duration, CRIM doesn't provide this in notes()
-                'measure': None,  # CRIM notes() doesn't include measure info
-                'beat': None,     # CRIM notes() doesn't include beat info
-                'pitch': pitch,
-                'name': name,
-                'step': step,
-                'octave': octave,
-                'alter': alter,
-                'type': note_type,
-                'staff': voice_num,  # Assume staff equals voice
-                'tie': None  # CRIM notes() doesn't include tie info
-            }
-            
-            notes_list.append(note_data)
-            note_id += 1
-    
-    return notes_list
 
 def parse_note_name(note_name: str) -> tuple:
     """Parse a note name like 'A4', 'C#5', 'Bb3' into pitch components

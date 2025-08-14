@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS pieces (
 CREATE TABLE IF NOT EXISTS notes (
 	note_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	piece_id INTEGER NOT NULL,
-	voice INTEGER,                    -- 声部编号 (CRIM: voice)
+	voice INTEGER,                    -- 声部编号 (1, 2, 3, ...) 
+	voice_name TEXT,                 -- 声部名称 (Cantus, Altus, Tenor, Bassus, etc.)
 	onset REAL,                      -- 音符开始时间，以四分音符为单位 (CRIM: offset)
 	duration REAL,                   -- 音符时长，以四分音符为单位 (CRIM: duration)
 	measure INTEGER,                 -- 小节号 (CRIM: measure)
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS melodic_intervals (
 	note_id INTEGER,                 -- 关联到notes表的note_id (起始音符)
 	next_note_id INTEGER,            -- 关联到notes表的note_id (结束音符)
 	voice INTEGER NOT NULL,
+	voice_name TEXT,                 -- 声部名称 (Cantus, Altus, Tenor, Bassus, etc.)
 	onset REAL NOT NULL,             -- 音程开始时间
 	measure INTEGER,
 	beat REAL,
@@ -55,7 +57,6 @@ CREATE TABLE IF NOT EXISTS melodic_intervals (
 	interval_type TEXT,              -- 音程类型描述 (如 "major 3rd")
 	interval_direction TEXT,         -- 音程方向: "ascending", "descending", "unison"
 	interval_quality TEXT,           -- 音程性质
-	voice_name TEXT,                 -- 声部名称
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
 	FOREIGN KEY (note_id) REFERENCES notes (note_id) ON DELETE SET NULL,
