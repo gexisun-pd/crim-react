@@ -8,14 +8,14 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from db.db import PiecesDB
 
-# Import crim_intervals for metadata extraction
+# Import music21 for metadata extraction
 try:
-    import crim_intervals
-    from crim_intervals import importScore
-    CRIM_INTERVALS_AVAILABLE = True
+    from music21 import converter
+    MUSIC21_AVAILABLE = True
 except ImportError:
-    print("Warning: crim_intervals not available. Falling back to filename-based extraction.")
-    CRIM_INTERVALS_AVAILABLE = False
+    print("Error: music21 library is required but not available.")
+    print("Please install music21: pip install music21")
+    MUSIC21_AVAILABLE = False
 
 def calculate_sha256(file_path: str) -> str:
     """Calculate SHA256 hash of a file"""
@@ -30,67 +30,70 @@ def calculate_sha256(file_path: str) -> str:
         return None
 
 def extract_title(file_path: str) -> str:
-    """Extract title from file using crim_intervals metadata or filename fallback"""
-    if CRIM_INTERVALS_AVAILABLE:
-        try:
-            # Use crim_intervals to get metadata
-            piece = importScore(file_path)
-            metadata = piece.metadata
-            
-            # Try to get title from metadata
-            if 'title' in metadata and metadata['title']:
-                return metadata['title']
-            elif 'movementName' in metadata and metadata['movementName']:
-                return metadata['movementName']
-            elif 'workTitle' in metadata and metadata['workTitle']:
-                return metadata['workTitle']
-        except Exception as e:
-            print(f"Warning: Could not extract title from {file_path} using crim_intervals: {e}")
+    """Extract title from file using music21 metadata"""
+    if not MUSIC21_AVAILABLE:
+        raise ImportError("music21 library is required for metadata extraction")
     
-    # Fallback to filename-based extraction
-    filename = os.path.basename(file_path)
-    title = os.path.splitext(filename)[0]
-    
-    # Remove .xml if it's a .musicxml.xml file
-    if title.endswith('.musicxml'):
-        title = title[:-9]
-    
-    # Replace underscores with spaces and clean up
-    title = title.replace('_', ' ')
-    return title
+    try:
+        # Use music21 to parse the file and get metadata
+        score = converter.parse(file_path)
+        
+        # Try to get title from metadata
+        if score.metadata is not None:
+            if score.metadata.title:
+                return score.metadata.title
+            elif score.metadata.movementName:
+                return score.metadata.movementName
+            elif hasattr(score.metadata, 'workTitle') and score.metadata.workTitle:
+                return score.metadata.workTitle
+        
+        # If no metadata title found, return filename without extension
+        filename = os.path.basename(file_path)
+        title = os.path.splitext(filename)[0]
+        if title.endswith('.musicxml'):
+            title = title[:-9]
+        return title
+        
+    except Exception as e:
+        print(f"Error: Could not extract title from {file_path}: {e}")
+        raise
 
 def extract_composer(file_path: str) -> str:
-    """Extract composer from file using crim_intervals metadata or filename fallback"""
-    if CRIM_INTERVALS_AVAILABLE:
-        try:
-            # Use crim_intervals to get metadata
-            piece = importScore(file_path)
-            metadata = piece.metadata
-            
-            # Try to get composer from metadata
-            if 'composer' in metadata and metadata['composer']:
-                return metadata['composer']
-            elif 'creators' in metadata and metadata['creators']:
+    """Extract composer from file using music21 metadata"""
+    if not MUSIC21_AVAILABLE:
+        raise ImportError("music21 library is required for metadata extraction")
+    
+    try:
+        # Use music21 to parse the file and get metadata
+        score = converter.parse(file_path)
+        
+        # Try to get composer from metadata
+        if score.metadata is not None:
+            if score.metadata.composer:
+                return score.metadata.composer
+            elif hasattr(score.metadata, 'creators') and score.metadata.creators:
                 # Handle multiple creators if needed
-                creators = metadata['creators']
+                creators = score.metadata.creators
                 if isinstance(creators, list) and len(creators) > 0:
-                    return creators[0]
+                    return str(creators[0])
                 elif isinstance(creators, str):
                     return creators
-        except Exception as e:
-            print(f"Warning: Could not extract composer from {file_path} using crim_intervals: {e}")
-    
-    # Fallback to filename-based extraction
-    filename = os.path.basename(file_path)
-    
-    # Try to extract composer from filename pattern
-    if '_' in filename:
-        parts = filename.split('_')
-        # Assume first part might be composer
-        composer = parts[0]
-        return composer
-    
-    return "Unknown"
+            # Try alternative composer fields
+            elif hasattr(score.metadata, 'lyricist') and score.metadata.lyricist:
+                return score.metadata.lyricist
+        
+        # If no composer found in metadata, try filename fallback
+        filename = os.path.basename(file_path)
+        if '_' in filename:
+            parts = filename.split('_')
+            composer = parts[0]
+            return composer
+        
+        return "Unknown"
+        
+    except Exception as e:
+        print(f"Error: Could not extract composer from {file_path}: {e}")
+        raise
 
 def get_musicxml_files(directory: str) -> List[str]:
     """Get all .musicxml and .musicxml.xml files from directory"""
@@ -132,6 +135,12 @@ def process_piece(file_path: str, data_root: str) -> Dict:
 
 def ingest_pieces_from_directory(test_dir: str = None):
     """Main function to ingest pieces from data/test directory"""
+    
+    # Check if music21 is available before proceeding
+    if not MUSIC21_AVAILABLE:
+        print("Cannot proceed without music21 library.")
+        print("Please install music21: pip install music21")
+        return
     
     # Get project root directory (two levels up from core/ingest/)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
