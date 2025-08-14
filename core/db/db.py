@@ -127,6 +127,46 @@ class PiecesDB:
                 conn.close()
             return []
     
+    def get_all_note_sets(self) -> List[Dict]:
+        """Get all note sets from the database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT * FROM note_sets ORDER BY set_id")
+            rows = cursor.fetchall()
+            
+            columns = [description[0] for description in cursor.description]
+            note_sets = [dict(zip(columns, row)) for row in rows]
+            
+            conn.close()
+            return note_sets
+            
+        except sqlite3.Error as e:
+            print(f"Database error retrieving note sets: {e}")
+            if conn:
+                conn.close()
+            return []
+    
+    def notes_exist_for_piece_and_set(self, piece_id: int, note_set_id: int) -> bool:
+        """Check if notes already exist for a piece and note set combination"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT COUNT(*) FROM notes WHERE piece_id = ? AND note_set_id = ?", 
+                         (piece_id, note_set_id))
+            count = cursor.fetchone()[0]
+            conn.close()
+            
+            return count > 0
+            
+        except sqlite3.Error as e:
+            print(f"Database error checking notes existence: {e}")
+            if conn:
+                conn.close()
+            return False
+    
     def notes_exist_for_piece(self, piece_id: int) -> bool:
         """Check if notes already exist for a piece"""
         try:
@@ -157,11 +197,12 @@ class PiecesDB:
                 try:
                     cursor.execute("""
                         INSERT INTO notes (
-                            piece_id, voice, voice_name, onset, duration, offset, measure, beat, 
+                            piece_id, note_set_id, voice, voice_name, onset, duration, offset, measure, beat, 
                             pitch, name, step, octave, `alter`, type, staff, tie
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         note_data['piece_id'],
+                        note_data.get('note_set_id'),
                         note_data.get('voice'),
                         note_data.get('voice_name'),
                         note_data.get('onset'),

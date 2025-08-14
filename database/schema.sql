@@ -9,10 +9,33 @@ CREATE TABLE IF NOT EXISTS pieces (
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Table: note_sets
+CREATE TABLE IF NOT EXISTS note_sets (
+	set_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	combine_unisons BOOLEAN NOT NULL,
+	slug TEXT NOT NULL UNIQUE,       -- Short identifier: cT or cF
+	description TEXT NOT NULL,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(combine_unisons)
+);
+
+-- Table: melodic_interval_sets
+CREATE TABLE IF NOT EXISTS melodic_interval_sets (
+	set_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	kind TEXT NOT NULL,              -- "quality" or "diatonic"
+	note_set_id INTEGER NOT NULL,    -- Reference to note_sets
+	slug TEXT NOT NULL UNIQUE,       -- Short identifier: cT_kq, cT_kd, cF_kq, cF_kd
+	description TEXT NOT NULL,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (note_set_id) REFERENCES note_sets (set_id) ON DELETE CASCADE,
+	UNIQUE(kind, note_set_id)
+);
+
 -- Table: notes
 CREATE TABLE IF NOT EXISTS notes (
 	note_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	piece_id INTEGER NOT NULL,
+	note_set_id INTEGER NOT NULL,        -- Reference to note_sets table
 	voice INTEGER,                    -- 声部编号 (1, 2, 3, ...) 
 	voice_name TEXT,                 -- 声部名称 (Cantus, Altus, Tenor, Bassus, etc.)
 	onset REAL,                      -- 音符开始时间，以四分音符为单位 (CRIM: offset)
@@ -29,7 +52,8 @@ CREATE TABLE IF NOT EXISTS notes (
 	staff INTEGER,                   -- 谱表编号 (CRIM: staff)
 	tie TEXT,                        -- 连音线信息 (CRIM: tie)
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE
+	FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
+	FOREIGN KEY (note_set_id) REFERENCES note_sets (set_id) ON DELETE CASCADE
 );
 
 -- Table: parameter_sets

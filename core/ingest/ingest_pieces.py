@@ -7,6 +7,7 @@ import sys
 # Add the core directory to the path to import db module
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from db.db import PiecesDB
+from crim_cache_manager import cache_manager
 
 # Import music21 for metadata extraction
 try:
@@ -118,14 +119,40 @@ def process_piece(file_path: str, data_root: str) -> Dict:
     try:
         # Calculate relative path from data directory
         rel_path = os.path.relpath(file_path, data_root)
+        filename = os.path.basename(file_path)
         
+        # Try to load from cache first
+        piece_key = cache_manager._get_piece_key(filename)
+        cached_data = cache_manager.load_stage_cache('pieces', 'pkl', 'default', piece_key)
+        
+        if cached_data is not None:
+            metadata = cached_data.get('metadata', {})
+            print(f"  Loading from cache: {filename}")
+            # Verify the cached data is still valid by checking file modification time
+            try:
+                cached_mtime = metadata.get('file_mtime', 0)
+                current_mtime = os.path.getmtime(file_path)
+                if abs(current_mtime - cached_mtime) < 1:  # Within 1 second tolerance
+                    return metadata
+                else:
+                    print(f"  Cache outdated for {filename}, reprocessing...")
+            except:
+                print(f"  Cache validation failed for {filename}, reprocessing...")
+        
+        # Process the piece if not in cache or cache is invalid
+        print(f"  Processing: {filename}")
         piece_data = {
             'path': rel_path,
-            'filename': os.path.basename(file_path),
+            'filename': filename,
             'title': extract_title(file_path),
             'composer': extract_composer(file_path),
-            'sha256': calculate_sha256(file_path)
+            'sha256': calculate_sha256(file_path),
+            'file_mtime': os.path.getmtime(file_path),
+            'processed_at': datetime.now().isoformat()
         }
+        
+        # Save to cache
+        cache_manager.save_stage_cache('pieces', 'pkl', 'default', piece_key, {}, piece_data)
         
         return piece_data
         

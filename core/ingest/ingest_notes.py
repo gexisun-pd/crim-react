@@ -28,24 +28,27 @@ except ImportError:
     CRIM_INTERVALS_AVAILABLE = False
     ImportedPiece = None
 
-def extract_notes_from_piece(file_path: str, piece_id: int) -> Optional[List[Dict]]:
-    """Extract notes from a piece using CRIM intervals library with caching"""
+def extract_notes_from_piece(file_path: str, piece_id: int, note_set_id: int, combine_unisons: bool, slug: str) -> Optional[List[Dict]]:
+    """Extract notes from a piece using CRIM intervals library with caching for specific note set"""
     if not CRIM_INTERVALS_AVAILABLE:
         raise ImportError("crim_intervals library is required for note extraction")
     
     filename = os.path.basename(file_path)
     piece_key = cache_manager._get_piece_key(filename)
     
-    print(f"  Processing piece: {piece_key}")
+    print(f"  Processing piece: {piece_key} with note_set {note_set_id} (combineUnisons={combine_unisons})")
     
-    # Check cache first
-    notes_df = cache_manager.load_dataframe(piece_key, 'notes')
-    durations_df = cache_manager.load_dataframe(piece_key, 'durations')
-    detail_df = cache_manager.load_dataframe(piece_key, 'detail_index')
+    # Check cache first - now organized by note set slug
+    cached_data = cache_manager.load_stage_cache('notes', 'pkl', slug, piece_key)
     
-    if notes_df is not None and durations_df is not None and detail_df is not None:
-        print(f"  Using cached DataFrames for {piece_key}")
-        return convert_notes_with_details_to_list(detail_df, durations_df, piece_id)
+    if cached_data is not None:
+        notes_df = cached_data.get('notes')
+        durations_df = cached_data.get('durations')
+        detail_df = cached_data.get('detail_index')
+        
+        if notes_df is not None and durations_df is not None and detail_df is not None:
+            print(f"  Using cached DataFrames for {piece_key} set {note_set_id}")
+            return convert_notes_with_details_to_list(detail_df, durations_df, piece_id, note_set_id)
     
     try:
         print(f"  Creating corpus and extracting notes...")
@@ -60,10 +63,10 @@ def extract_notes_from_piece(file_path: str, piece_id: int) -> Optional[List[Dic
         
         piece = corpus.scores[0]
         
-        print(f"  Extracting notes using CRIM intervals...")
+        print(f"  Extracting notes using CRIM intervals with combineUnisons={combine_unisons}...")
         
-        # Get the basic notes DataFrame
-        notes_df = piece.notes()
+        # Get the basic notes DataFrame with the specified combineUnisons parameter
+        notes_df = piece.notes(combineUnisons=combine_unisons)
         
         if notes_df.empty:
             print(f"  Warning: No notes found in {file_path}")
@@ -81,20 +84,25 @@ def extract_notes_from_piece(file_path: str, piece_id: int) -> Optional[List[Dic
         print(f"  Notes with details shape: {detail_df.shape}")
         print(f"  Durations DataFrame shape: {durations_df.shape}")
         
-        # Save to cache with metadata
+        # Save to cache with metadata - organized by note set
         metadata = {
             'file_path': file_path,
             'piece_id': piece_id,
+            'note_set_id': note_set_id,
+            'combine_unisons': combine_unisons,
             'extraction_method': 'crim_intervals'
         }
         
-        cache_manager.save_dataframe(piece_key, 'notes', notes_df, metadata)
-        cache_manager.save_dataframe(piece_key, 'durations', durations_df, metadata)
-        cache_manager.save_dataframe(piece_key, 'detail_index', detail_df, metadata)
+        data_dict = {
+            'notes': notes_df,
+            'durations': durations_df,
+            'detail_index': detail_df
+        }
+        cache_manager.save_stage_cache('notes', 'pkl', slug, piece_key, data_dict, metadata)
         
-        print(f"  Saved DataFrames to cache for {piece_key}")
+        print(f"  Saved DataFrames to cache for {piece_key} set {note_set_id}")
         
-        return convert_notes_with_details_to_list(detail_df, durations_df, piece_id)
+        return convert_notes_with_details_to_list(detail_df, durations_df, piece_id, note_set_id)
         
     except Exception as e:
         print(f"  Error extracting notes from {file_path}: {e}")
@@ -102,13 +110,14 @@ def extract_notes_from_piece(file_path: str, piece_id: int) -> Optional[List[Dic
         traceback.print_exc()
         raise
 
-def convert_notes_with_details_to_list(notes_df, durations_df, piece_id: int) -> List[Dict]:
+def convert_notes_with_details_to_list(notes_df, durations_df, piece_id: int, note_set_id: int) -> List[Dict]:
     """Convert notes DataFrame with detail index to list of dictionaries
     
     Args:
         notes_df: DataFrame from piece.detailIndex(piece.notes(), measure=True, beat=True, offset=True)
         durations_df: DataFrame from piece.durations()
         piece_id: ID of the piece in the database
+        note_set_id: ID of the note set configuration
     
     Returns:
         List of note dictionaries for database insertion
@@ -215,9 +224,10 @@ def convert_notes_with_details_to_list(notes_df, durations_df, piece_id: int) ->
                 except Exception as e:
                     print(f"    Warning: Could not parse note '{note_value}': {e}")
             
-            # Create note record
+            # Create note record with note_set_id
             note_data = {
                 'piece_id': piece_id,
+                'note_set_id': note_set_id,  # Add note_set_id to each note record
                 'voice': voice_idx,
                 'voice_name': voice_name,  # Store the voice name from CRIM (e.g., "Cantus", "Altus")
                 'onset': float(offset),
@@ -278,7 +288,7 @@ def parse_note_name(note_name: str) -> tuple:
     return midi_pitch, step, octave, alter
 
 def ingest_notes_for_all_pieces():
-    """Main function to ingest notes for all pieces in the database"""
+    """Main function to ingest notes for all pieces in the database using all note sets"""
     
     # Check if crim_intervals is available before proceeding
     if not CRIM_INTERVALS_AVAILABLE:
@@ -288,8 +298,21 @@ def ingest_notes_for_all_pieces():
     # Initialize database connection
     db = PiecesDB()
     
+    # Get all note sets from database
+    print("Retrieving all note sets from database...")
+    note_sets = db.get_all_note_sets()
+    
+    if not note_sets:
+        print("No note sets found in database.")
+        print("Please run init_db.py first to create note sets.")
+        return
+    
+    print(f"Found {len(note_sets)} note sets:")
+    for note_set in note_sets:
+        print(f"  Set {note_set['set_id']}: {note_set['description']} (combineUnisons={note_set['combine_unisons']})")
+    
     # Get all pieces from database
-    print("Retrieving all pieces from database...")
+    print("\nRetrieving all pieces from database...")
     pieces = db.get_all_pieces()
     
     if not pieces:
@@ -303,66 +326,99 @@ def ingest_notes_for_all_pieces():
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     data_root = os.path.join(project_root, 'data')
     
-    processed_count = 0
-    skipped_count = 0
-    error_count = 0
+    total_processed_count = 0
+    total_skipped_count = 0
+    total_error_count = 0
     total_notes = 0
     
-    # Process each piece
-    for piece in pieces:
-        piece_id = piece['piece_id']
-        piece_path = piece['path']
-        piece_filename = piece['filename']
+    # Process each note set
+    for note_set in note_sets:
+        note_set_id = note_set['set_id']
+        combine_unisons = bool(note_set['combine_unisons'])
+        description = note_set['description']
+        slug = note_set['slug']  # Get the slug from the note_set
         
-        print(f"\nProcessing piece {piece_id}: {piece_filename}")
+        print(f"\n{'='*60}")
+        print(f"Processing Note Set {note_set_id}: {description} ({slug})")
+        print(f"combineUnisons = {combine_unisons}")
+        print(f"{'='*60}")
         
-        try:
-            # Check if notes already exist for this piece
-            if db.notes_exist_for_piece(piece_id):
-                print(f"  Skipping - notes already exist for piece {piece_id}")
-                skipped_count += 1
-                continue
+        set_processed_count = 0
+        set_skipped_count = 0
+        set_error_count = 0
+        set_notes = 0
+        
+        # Process each piece for this note set
+        for piece in pieces:
+            piece_id = piece['piece_id']
+            piece_path = piece['path']
+            piece_filename = piece['filename']
             
-            # Construct full file path
-            full_file_path = os.path.join(data_root, piece_path)
+            print(f"\nProcessing piece {piece_id}: {piece_filename} (Set {note_set_id})")
             
-            if not os.path.exists(full_file_path):
-                print(f"  Error: File not found: {full_file_path}")
-                error_count += 1
-                continue
-            
-            # Extract notes from the piece
-            notes_list = extract_notes_from_piece(full_file_path, piece_id)
-            
-            if not notes_list:
-                print(f"  Warning: No notes extracted from {piece_filename}")
-                processed_count += 1  # Still count as processed
-                continue
-            
-            # Insert notes into database
-            print(f"  Inserting {len(notes_list)} notes into database...")
-            success_count = db.insert_notes_batch(notes_list)
-            
-            if success_count == len(notes_list):
-                print(f"  Successfully inserted {success_count} notes")
-                processed_count += 1
-                total_notes += success_count
-            else:
-                print(f"  Warning: Only {success_count}/{len(notes_list)} notes inserted")
-                error_count += 1
+            try:
+                # Check if notes already exist for this piece and note set
+                if db.notes_exist_for_piece_and_set(piece_id, note_set_id):
+                    print(f"  Skipping - notes already exist for piece {piece_id}, set {note_set_id}")
+                    set_skipped_count += 1
+                    continue
                 
-        except Exception as e:
-            print(f"  Error processing piece {piece_id}: {e}")
-            error_count += 1
-            continue
+                # Construct full file path
+                full_file_path = os.path.join(data_root, piece_path)
+                
+                if not os.path.exists(full_file_path):
+                    print(f"  Error: File not found: {full_file_path}")
+                    set_error_count += 1
+                    continue
+                
+                # Extract notes from the piece with the specific note set configuration
+                notes_list = extract_notes_from_piece(full_file_path, piece_id, note_set_id, combine_unisons, slug)
+                
+                if not notes_list:
+                    print(f"  Warning: No notes extracted from {piece_filename}")
+                    set_processed_count += 1  # Still count as processed
+                    continue
+                
+                # Insert notes into database
+                print(f"  Inserting {len(notes_list)} notes into database...")
+                success_count = db.insert_notes_batch(notes_list)
+                
+                if success_count == len(notes_list):
+                    print(f"  Successfully inserted {success_count} notes")
+                    set_processed_count += 1
+                    set_notes += success_count
+                else:
+                    print(f"  Warning: Only {success_count}/{len(notes_list)} notes inserted")
+                    set_error_count += 1
+                    
+            except Exception as e:
+                print(f"  Error processing piece {piece_id}: {e}")
+                set_error_count += 1
+                continue
+        
+        # Print summary for this note set
+        print(f"\n--- Note Set {note_set_id} Summary ---")
+        print(f"Successfully processed: {set_processed_count}")
+        print(f"Skipped (already exists): {set_skipped_count}")
+        print(f"Errors: {set_error_count}")
+        print(f"Notes inserted: {set_notes}")
+        
+        # Add to totals
+        total_processed_count += set_processed_count
+        total_skipped_count += set_skipped_count
+        total_error_count += set_error_count
+        total_notes += set_notes
     
-    # Print summary
-    print(f"\n=== Notes Ingestion Summary ===")
-    print(f"Total pieces found: {len(pieces)}")
-    print(f"Successfully processed: {processed_count}")
-    print(f"Skipped (already exists): {skipped_count}")
-    print(f"Errors: {error_count}")
+    # Print overall summary
+    print(f"\n{'='*60}")
+    print(f"=== Overall Notes Ingestion Summary ===")
+    print(f"Total note sets: {len(note_sets)}")
+    print(f"Total pieces: {len(pieces)}")
+    print(f"Total combinations processed: {total_processed_count}")
+    print(f"Total combinations skipped: {total_skipped_count}")
+    print(f"Total errors: {total_error_count}")
     print(f"Total notes inserted: {total_notes}")
+    print(f"{'='*60}")
 
 if __name__ == "__main__":
     ingest_notes_for_all_pieces()
