@@ -38,50 +38,134 @@ def extract_notes_from_piece(file_path: str, piece_id: int) -> Optional[List[Dic
         # Create a corpus with just this piece
         corpus = CorpusBase([file_path])
         
-        # Use the batch method to extract notes according to CRIM documentation
-        # We'll try different ways to access the notes function
-        try:
-            if ImportedPiece:
-                func = ImportedPiece.notes
-            else:
-                # Try to get it from the crim_intervals module
-                func = getattr(crim_intervals, 'ImportedPiece').notes
-        except AttributeError:
-            # Fallback: try accessing through the scores directly
-            if hasattr(corpus, 'scores') and len(corpus.scores) > 0:
-                piece = corpus.scores[0]
-                notes_df = piece.notes()
-                
-                if notes_df.empty:
-                    print(f"  Warning: No notes found in {file_path}")
-                    return []
-                
-                print(f"  Found {len(notes_df)} notes")
-                return convert_notes_df_to_list(notes_df, piece_id)
-            else:
-                raise AttributeError("Cannot access notes function")
+        # Access the piece from corpus.scores
+        if not hasattr(corpus, 'scores') or len(corpus.scores) == 0:
+            print(f"  Error: No scores found in corpus")
+            return []
         
-        # Use batch method
-        list_of_dfs = corpus.batch(func, metadata=True)
+        piece = corpus.scores[0]
         
-        if not list_of_dfs or len(list_of_dfs) == 0:
+        print(f"  Extracting notes using CRIM intervals...")
+        
+        # Get the basic notes DataFrame
+        notes_df = piece.notes()
+        
+        if notes_df.empty:
             print(f"  Warning: No notes found in {file_path}")
             return []
         
-        # Get the notes DataFrame (should be the first and only one in our list)
-        notes_df = list_of_dfs[0]
+        print(f"  Adding measure and beat information using detailIndex...")
         
-        if notes_df.empty:
-            print(f"  Warning: Empty notes DataFrame for {file_path}")
-            return []
+        # Use detailIndex to get measure and beat information
+        notes_with_detail = piece.detailIndex(notes_df, measure=True, beat=True, offset=True)
         
-        print(f"  Found {len(notes_df)} notes")
+        print(f"  Found {len(notes_with_detail)} note events")
         
-        return convert_notes_df_to_list(notes_df, piece_id)
+        return convert_notes_df_to_list_with_detail(notes_with_detail, piece_id)
         
     except Exception as e:
         print(f"  Error extracting notes from {file_path}: {e}")
         raise
+
+def convert_notes_df_to_list_with_detail(notes_df, piece_id: int) -> List[Dict]:
+    """Convert notes DataFrame with detailIndex to list of dictionaries"""
+    notes_list = []
+    
+    # Get column names that represent voice parts (exclude measure, beat, offset columns)
+    voice_columns = [col for col in notes_df.columns if col not in ['Measure', 'Beat', 'Offset']]
+    
+    for index, row in notes_df.iterrows():
+        # Extract measure, beat, and offset information from the index or columns
+        if isinstance(notes_df.index, pd.MultiIndex):
+            # If multi-index, extract from index
+            if 'Measure' in notes_df.index.names:
+                measure = index[notes_df.index.names.index('Measure')] if 'Measure' in notes_df.index.names else None
+            else:
+                measure = None
+            if 'Beat' in notes_df.index.names:
+                beat = index[notes_df.index.names.index('Beat')] if 'Beat' in notes_df.index.names else None
+            else:
+                beat = None
+            if 'Offset' in notes_df.index.names:
+                offset = index[notes_df.index.names.index('Offset')] if 'Offset' in notes_df.index.names else index
+            else:
+                offset = index
+        else:
+            # If single index, offset is the index, and measure/beat might be in columns
+            offset = index
+            measure = row.get('Measure') if 'Measure' in notes_df.columns else None
+            beat = row.get('Beat') if 'Beat' in notes_df.columns else None
+        
+        # Process each voice part
+        for voice_name in voice_columns:
+            note_value = row[voice_name]
+            
+            # Skip NaN values and empty cells
+            if pd.isna(note_value) or note_value == '':
+                continue
+            
+            # Parse note information
+            note_type = "Rest" if str(note_value).strip() == "Rest" else "Note"
+            
+            # Extract pitch information if it's a note
+            pitch = None
+            name = None
+            step = None
+            octave = None
+            alter = None
+            
+            if note_type == "Note" and str(note_value) != "Rest":
+                try:
+                    # Basic parsing - CRIM might give us note names like "A4", "C#5", etc.
+                    note_str = str(note_value).strip()
+                    name = note_str
+                    
+                    # Try to extract basic pitch information
+                    if len(note_str) >= 2:
+                        step = note_str[0].upper()
+                        
+                        # Look for octave (usually the last character)
+                        if note_str[-1].isdigit():
+                            octave = int(note_str[-1])
+                        
+                        # Look for accidentals
+                        if '#' in note_str:
+                            alter = 1
+                        elif 'b' in note_str or '♭' in note_str:
+                            alter = -1
+                        else:
+                            alter = 0
+                            
+                        # Calculate approximate MIDI pitch if we have step and octave
+                        if step and octave is not None:
+                            step_values = {'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11}
+                            if step in step_values:
+                                pitch = (octave + 1) * 12 + step_values[step] + (alter or 0)
+                
+                except Exception:
+                    # If parsing fails, just store the original value
+                    name = str(note_value)
+            
+            note_data = {
+                'piece_id': piece_id,
+                'voice': voice_name,  # Use voice name instead of number for now
+                'onset': float(offset) if offset is not None else 0.0,
+                'duration': None,  # We'll need to calculate this separately or get from durations()
+                'measure': int(measure) if measure is not None and pd.notna(measure) else None,
+                'beat': float(beat) if beat is not None and pd.notna(beat) else None,
+                'pitch': pitch,
+                'name': name,
+                'step': step,
+                'octave': octave,
+                'alter': alter,
+                'type': note_type,
+                'staff': None,  # Not available in basic notes()
+                'tie': None  # Not available in basic notes()
+            }
+            
+            notes_list.append(note_data)
+    
+    return notes_list
 
 def convert_notes_df_to_list(notes_df, piece_id: int) -> List[Dict]:
     """Convert notes DataFrame to list of dictionaries
