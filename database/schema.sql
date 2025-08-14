@@ -13,13 +13,11 @@ CREATE TABLE IF NOT EXISTS pieces (
 CREATE TABLE IF NOT EXISTS notes (
 	note_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	piece_id INTEGER NOT NULL,
-	voice TEXT,                      -- 声部名称 (CRIM: voice/part name)
+	voice INTEGER,                    -- 声部编号 (CRIM: voice)
 	onset REAL,                      -- 音符开始时间，以四分音符为单位 (CRIM: offset)
 	duration REAL,                   -- 音符时长，以四分音符为单位 (CRIM: duration)
-	measure INTEGER,                 -- 小节号 (CRIM: Measure from detailIndex)
-	beat REAL,                       -- 拍位 (CRIM: Beat from detailIndex)
-	offset_detail REAL,              -- 详细时间偏移 (CRIM: Offset from detailIndex)
-	beat_strength REAL,              -- 拍子强度 (CRIM: Beat_Strength from detailIndex)
+	measure INTEGER,                 -- 小节号 (CRIM: measure)
+	beat REAL,                       -- 拍位 (CRIM: beat)
 	pitch INTEGER,                   -- MIDI音高数字 (CRIM: pitch)
 	name TEXT,                       -- 音名，如C4, D#5 (CRIM: name)
 	step TEXT,                       -- 音级，如C, D, E (CRIM: step)
@@ -30,4 +28,15 @@ CREATE TABLE IF NOT EXISTS notes (
 	tie TEXT,                        -- 连音线信息 (CRIM: tie)
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE
+);
+
+-- Table: parameter_sets
+CREATE TABLE IF NOT EXISTS parameter_sets (
+	parameter_set_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	description TEXT NOT NULL,       -- 参数组合的描述，如 "4_q_cT"
+	kind TEXT NOT NULL,              -- 音程类型: "quality" 或 "diatonic"
+	combine_unisons BOOLEAN NOT NULL, -- 是否合并齐音: true 或 false
+	number INTEGER NOT NULL,         -- 音程数字: 3-10
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	UNIQUE(kind, combine_unisons, number)  -- 确保参数组合唯一
 );
