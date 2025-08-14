@@ -6,6 +6,7 @@ import pandas as pd
 # Add the core directory to the path to import db module
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from db.db import PiecesDB
+from crim_cache_manager import cache_manager
 
 # Import crim_intervals for note extraction
 try:
@@ -28,9 +29,23 @@ except ImportError:
     ImportedPiece = None
 
 def extract_notes_from_piece(file_path: str, piece_id: int) -> Optional[List[Dict]]:
-    """Extract notes from a piece using CRIM intervals library"""
+    """Extract notes from a piece using CRIM intervals library with caching"""
     if not CRIM_INTERVALS_AVAILABLE:
         raise ImportError("crim_intervals library is required for note extraction")
+    
+    filename = os.path.basename(file_path)
+    piece_key = cache_manager._get_piece_key(filename)
+    
+    print(f"  Processing piece: {piece_key}")
+    
+    # Check cache first
+    notes_df = cache_manager.load_dataframe(piece_key, 'notes')
+    durations_df = cache_manager.load_dataframe(piece_key, 'durations')
+    detail_df = cache_manager.load_dataframe(piece_key, 'detail_index')
+    
+    if notes_df is not None and durations_df is not None and detail_df is not None:
+        print(f"  Using cached DataFrames for {piece_key}")
+        return convert_notes_with_details_to_list(detail_df, durations_df, piece_id)
     
     try:
         print(f"  Creating corpus and extracting notes...")
@@ -60,14 +75,26 @@ def extract_notes_from_piece(file_path: str, piece_id: int) -> Optional[List[Dic
         
         print(f"  Adding measure and beat information using detailIndex...")
         # Use detailIndex to get measure and beat information
-        # This will add measure and beat columns/index to our DataFrames
-        notes_with_detail = piece.detailIndex(notes_df, measure=True, beat=True, offset=True)
+        detail_df = piece.detailIndex(notes_df, measure=True, beat=True, offset=True)
         
         print(f"  Notes DataFrame shape: {notes_df.shape}")
-        print(f"  Notes with details shape: {notes_with_detail.shape}")
+        print(f"  Notes with details shape: {detail_df.shape}")
         print(f"  Durations DataFrame shape: {durations_df.shape}")
         
-        return convert_notes_with_details_to_list(notes_with_detail, durations_df, piece_id)
+        # Save to cache with metadata
+        metadata = {
+            'file_path': file_path,
+            'piece_id': piece_id,
+            'extraction_method': 'crim_intervals'
+        }
+        
+        cache_manager.save_dataframe(piece_key, 'notes', notes_df, metadata)
+        cache_manager.save_dataframe(piece_key, 'durations', durations_df, metadata)
+        cache_manager.save_dataframe(piece_key, 'detail_index', detail_df, metadata)
+        
+        print(f"  Saved DataFrames to cache for {piece_key}")
+        
+        return convert_notes_with_details_to_list(detail_df, durations_df, piece_id)
         
     except Exception as e:
         print(f"  Error extracting notes from {file_path}: {e}")
