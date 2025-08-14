@@ -54,10 +54,17 @@ CREATE TABLE IF NOT EXISTS melodic_intervals (
 	onset REAL NOT NULL,             -- 音程开始时间
 	measure INTEGER,
 	beat REAL,
-	interval_semitones REAL,         -- 音程的半音数
-	interval_type TEXT,              -- 音程类型描述 (如 "major 3rd")
+	interval_semitones REAL,         -- 音程的半音数 (从chromatic或quality解析得出)
+	interval_type TEXT,              -- 主要音程类型描述 (如 "major 3rd")
 	interval_direction TEXT,         -- 音程方向: "ascending", "descending", "unison"
 	interval_quality TEXT,           -- 音程性质
+	
+	-- CRIM音程记号的所有类型
+	interval_quality_notation TEXT,     -- 带性质的全音阶音程 (P8, M3, m3)
+	interval_diatonic_notation TEXT,    -- 不带性质的全音阶音程 (8, 3)
+	interval_chromatic_notation TEXT,   -- 半音程记号 (12, 6, 0)
+	interval_zerobased_notation TEXT,   -- 零基全音阶音程 (7, -4, 2)
+	
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
 	FOREIGN KEY (note_id) REFERENCES notes (note_id) ON DELETE SET NULL,
@@ -70,3 +77,5 @@ CREATE INDEX IF NOT EXISTS idx_melodic_intervals_voice ON melodic_intervals(voic
 CREATE INDEX IF NOT EXISTS idx_melodic_intervals_onset ON melodic_intervals(onset);
 CREATE INDEX IF NOT EXISTS idx_melodic_intervals_note ON melodic_intervals(note_id);
 CREATE INDEX IF NOT EXISTS idx_melodic_intervals_next_note ON melodic_intervals(next_note_id);
+CREATE INDEX IF NOT EXISTS idx_melodic_intervals_semitones ON melodic_intervals(interval_semitones);
+CREATE INDEX IF NOT EXISTS idx_melodic_intervals_direction ON melodic_intervals(interval_direction);
