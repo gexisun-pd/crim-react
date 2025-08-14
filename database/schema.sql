@@ -40,3 +40,31 @@ CREATE TABLE IF NOT EXISTS parameter_sets (
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	UNIQUE(kind, combine_unisons, number)  -- 确保参数组合唯一
 );
+
+-- Table: melodic_intervals
+CREATE TABLE IF NOT EXISTS melodic_intervals (
+	interval_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	piece_id INTEGER NOT NULL,
+	note_id INTEGER,                 -- 关联到notes表的note_id (起始音符)
+	next_note_id INTEGER,            -- 关联到notes表的note_id (结束音符)
+	voice INTEGER NOT NULL,
+	onset REAL NOT NULL,             -- 音程开始时间
+	measure INTEGER,
+	beat REAL,
+	interval_semitones REAL,         -- 音程的半音数
+	interval_type TEXT,              -- 音程类型描述 (如 "major 3rd")
+	interval_direction TEXT,         -- 音程方向: "ascending", "descending", "unison"
+	interval_quality TEXT,           -- 音程性质
+	voice_name TEXT,                 -- 声部名称
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
+	FOREIGN KEY (note_id) REFERENCES notes (note_id) ON DELETE SET NULL,
+	FOREIGN KEY (next_note_id) REFERENCES notes (note_id) ON DELETE SET NULL
+);
+
+-- Indexes for melodic_intervals table
+CREATE INDEX IF NOT EXISTS idx_melodic_intervals_piece ON melodic_intervals(piece_id);
+CREATE INDEX IF NOT EXISTS idx_melodic_intervals_voice ON melodic_intervals(voice);
+CREATE INDEX IF NOT EXISTS idx_melodic_intervals_onset ON melodic_intervals(onset);
+CREATE INDEX IF NOT EXISTS idx_melodic_intervals_note ON melodic_intervals(note_id);
+CREATE INDEX IF NOT EXISTS idx_melodic_intervals_next_note ON melodic_intervals(next_note_id);

@@ -235,6 +235,24 @@ def convert_melodic_intervals_to_list(intervals_df, piece_id: int) -> List[Dict]
                 'voice_name': voice_name
             }
             
+            # Try to find matching note_ids for this interval
+            # For melodic intervals, we need the start note and the next note
+            try:
+                # Use voice_idx which corresponds to the DataFrame column position
+                start_note_id, next_note_id = find_matching_note_ids(piece_id, voice_idx, float(offset))
+                interval_data['note_id'] = start_note_id
+                interval_data['next_note_id'] = next_note_id
+                
+                if start_note_id is None:
+                    print(f"    Warning: Could not find matching note_id for interval at onset {offset}, voice {voice_idx} ({voice_name})")
+                else:
+                    print(f"    Success: Found note_id={start_note_id}, next_note_id={next_note_id} for voice {voice_idx} at onset {offset}")
+                
+            except Exception as e:
+                print(f"    Warning: Error finding note_ids for interval: {e}")
+                interval_data['note_id'] = None
+                interval_data['next_note_id'] = None
+            
             intervals_list.append(interval_data)
     
     print(f"  Converted to {len(intervals_list)} melodic interval records")
@@ -248,22 +266,28 @@ def create_melodic_intervals_table():
     CREATE TABLE IF NOT EXISTS melodic_intervals (
         interval_id INTEGER PRIMARY KEY AUTOINCREMENT,
         piece_id INTEGER NOT NULL,
+        note_id INTEGER,                 -- 关联到notes表的note_id (起始音符)
+        next_note_id INTEGER,            -- 关联到notes表的note_id (结束音符)
         voice INTEGER NOT NULL,
-        onset REAL NOT NULL,
+        onset REAL NOT NULL,             -- 音程开始时间
         measure INTEGER,
         beat REAL,
-        interval_semitones REAL,
-        interval_type TEXT,
-        interval_direction TEXT,
-        interval_quality TEXT,
-        voice_name TEXT,
+        interval_semitones REAL,         -- 音程的半音数
+        interval_type TEXT,              -- 音程类型描述 (如 "major 3rd")
+        interval_direction TEXT,         -- 音程方向: "ascending", "descending", "unison"
+        interval_quality TEXT,           -- 音程性质
+        voice_name TEXT,                 -- 声部名称
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (piece_id) REFERENCES pieces (piece_id)
+        FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
+        FOREIGN KEY (note_id) REFERENCES notes (note_id) ON DELETE SET NULL,
+        FOREIGN KEY (next_note_id) REFERENCES notes (note_id) ON DELETE SET NULL
     );
     
     CREATE INDEX IF NOT EXISTS idx_melodic_intervals_piece ON melodic_intervals(piece_id);
     CREATE INDEX IF NOT EXISTS idx_melodic_intervals_voice ON melodic_intervals(voice);
     CREATE INDEX IF NOT EXISTS idx_melodic_intervals_onset ON melodic_intervals(onset);
+    CREATE INDEX IF NOT EXISTS idx_melodic_intervals_note ON melodic_intervals(note_id);
+    CREATE INDEX IF NOT EXISTS idx_melodic_intervals_next_note ON melodic_intervals(next_note_id);
     """
     
     try:
@@ -289,15 +313,17 @@ def insert_melodic_intervals_batch(intervals_list: List[Dict]) -> int:
     
     insert_sql = """
     INSERT INTO melodic_intervals (
-        piece_id, voice, onset, measure, beat, interval_semitones,
-        interval_type, interval_direction, interval_quality, voice_name
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        piece_id, note_id, next_note_id, voice, onset, measure, beat, 
+        interval_semitones, interval_type, interval_direction, interval_quality, voice_name
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     
     values_list = []
     for interval in intervals_list:
         values = (
             interval.get('piece_id'),
+            interval.get('note_id'),
+            interval.get('next_note_id'),
             interval.get('voice'),
             interval.get('onset'),
             interval.get('measure'),
@@ -325,7 +351,122 @@ def insert_melodic_intervals_batch(intervals_list: List[Dict]) -> int:
             conn.close()
         return 0
 
+def get_notes_for_piece(piece_id: int) -> List[Dict]:
+    """Get all notes for a specific piece from the database"""
+    db = PiecesDB()
+    
+    try:
+        import sqlite3
+        conn = sqlite3.connect(db.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT note_id, piece_id, voice, onset, duration, measure, beat, 
+                   pitch, name, step, octave, `alter`, type, staff, tie
+            FROM notes 
+            WHERE piece_id = ? 
+            ORDER BY voice, onset
+        """, (piece_id,))
+        
+        rows = cursor.fetchall()
+        columns = [description[0] for description in cursor.description]
+        notes = [dict(zip(columns, row)) for row in rows]
+        
+        conn.close()
+        return notes
+        
+    except Exception as e:
+        print(f"Error retrieving notes for piece {piece_id}: {e}")
+        if 'conn' in locals():
+            conn.close()
+        return []
+
+def find_matching_note_ids(piece_id: int, voice: int, onset: float, next_onset: float = None) -> tuple:
+    """Find note_id and next_note_id for melodic interval based on voice, onset timing"""
+    notes = get_notes_for_piece(piece_id)
+    
+    # Convert voice to string since database stores voice as text
+    voice_str = str(voice)
+    
+    # Filter notes for the specific voice
+    voice_notes = [note for note in notes if str(note['voice']) == voice_str and note['type'] == 'Note']
+    
+    if not voice_notes:
+        print(f"    Debug: No notes found for voice {voice_str} (tried voice={voice})")
+        return None, None
+    
+    # Sort by onset to ensure proper order
+    voice_notes.sort(key=lambda x: x['onset'])
+    
+    # Find the note at the current onset (start note of interval)
+    start_note_id = None
+    next_note_id = None
+    
+    # Use larger tolerance since DataFrame and database onsets might have different precision/offset
+    tolerance = 1.0  # Much larger tolerance to account for different time references
+    
+    # Debug info
+    print(f"    Debug: Looking for onset {onset:.3f} in voice {voice_str}")
+    print(f"    Debug: Found {len(voice_notes)} notes in voice {voice_str}")
+    print(f"    Debug: First few onsets: {[n['onset'] for n in voice_notes[:5]]}")
+    
+    # Try to find the closest match within tolerance
+    best_match = None
+    best_diff = float('inf')
+    
+    for i, note in enumerate(voice_notes):
+        diff = abs(note['onset'] - onset)
+        if diff < best_diff:
+            best_diff = diff
+            best_match = (i, note)
+        
+        # Check if this note matches within tolerance
+        if diff <= tolerance:
+            start_note_id = note['note_id']
+            
+            # If we have next_onset, try to find the exact next note
+            if next_onset is not None:
+                for j in range(i + 1, len(voice_notes)):
+                    next_diff = abs(voice_notes[j]['onset'] - next_onset)
+                    if next_diff <= tolerance:
+                        next_note_id = voice_notes[j]['note_id']
+                        break
+            else:
+                # If no next_onset specified, just take the next note in sequence
+                if i + 1 < len(voice_notes):
+                    next_note_id = voice_notes[i + 1]['note_id']
+            break
+    
+    # If no exact match found, try to use the closest match
+    if start_note_id is None and best_match is not None:
+        i, note = best_match
+        print(f"    Debug: No exact match found, using closest match with diff={best_diff:.3f}")
+        start_note_id = note['note_id']
+        if i + 1 < len(voice_notes):
+            next_note_id = voice_notes[i + 1]['note_id']
+    
+    if start_note_id is None:
+        print(f"    Debug: Could not find any reasonable match for onset {onset}")
+    
+    return start_note_id, next_note_id
+
 def melodic_intervals_exist_for_piece(piece_id: int) -> bool:
+    """Check if melodic intervals already exist for a piece"""
+    db = PiecesDB()
+    
+    try:
+        import sqlite3
+        conn = sqlite3.connect(db.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM melodic_intervals WHERE piece_id = ?", (piece_id,))
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count > 0
+    except Exception as e:
+        print(f"Error checking melodic intervals existence: {e}")
+        if 'conn' in locals():
+            conn.close()
+        return False
     """Check if melodic intervals already exist for a piece"""
     db = PiecesDB()
     
