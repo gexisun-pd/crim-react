@@ -134,21 +134,24 @@ def convert_notes_with_details_to_list(notes_df, durations_df, piece_id: int) ->
         
         # Check if we have multi-index or columns with timing info
         if isinstance(notes_df.index, pd.MultiIndex):
-            # Multi-index case (Offset, Measure, Beat)
-            if len(idx) >= 1:
-                offset = idx[0]
-            if len(idx) >= 2:
-                measure = idx[1]
-            if len(idx) >= 3:
-                beat = idx[2]
+            # If multi-index, extract from index by name
+            if 'Measure' in notes_df.index.names:
+                measure = idx[notes_df.index.names.index('Measure')] if 'Measure' in notes_df.index.names else None
+            else:
+                measure = None
+            if 'Beat' in notes_df.index.names:
+                beat = idx[notes_df.index.names.index('Beat')] if 'Beat' in notes_df.index.names else None
+            else:
+                beat = None
+            if 'Offset' in notes_df.index.names:
+                offset = idx[notes_df.index.names.index('Offset')] if 'Offset' in notes_df.index.names else idx
+            else:
+                offset = idx
         else:
             # Single index, check for timing columns
-            if 'Measure' in notes_df.columns:
-                measure = row.get('Measure')
-            if 'Beat' in notes_df.columns:
-                beat = row.get('Beat')
-            if 'Offset' in notes_df.columns:
-                offset = row.get('Offset')
+            offset = idx
+            measure = row.get('Measure') if 'Measure' in notes_df.columns else None
+            beat = row.get('Beat') if 'Beat' in notes_df.columns else None
         
         # Get duration for this offset
         duration = 0.0
@@ -219,6 +222,7 @@ def convert_notes_with_details_to_list(notes_df, durations_df, piece_id: int) ->
                 'voice_name': voice_name,  # Store the voice name from CRIM (e.g., "Cantus", "Altus")
                 'onset': float(offset),
                 'duration': duration,
+                'offset': float(offset) + float(duration),
                 'measure': int(measure) if measure is not None and pd.notna(measure) else None,
                 'beat': float(beat) if beat is not None and pd.notna(beat) else None,
                 'pitch': pitch,
