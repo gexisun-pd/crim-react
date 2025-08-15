@@ -102,3 +102,27 @@ CREATE INDEX IF NOT EXISTS idx_melodic_intervals_piece ON melodic_intervals(piec
 CREATE INDEX IF NOT EXISTS idx_melodic_intervals_set ON melodic_intervals(melodic_interval_set_id);
 CREATE INDEX IF NOT EXISTS idx_melodic_intervals_voice ON melodic_intervals(voice);
 CREATE INDEX IF NOT EXISTS idx_melodic_intervals_onset ON melodic_intervals(onset);
+
+-- Table: melodic_ngrams
+CREATE TABLE IF NOT EXISTS melodic_ngrams (
+	ngram_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	piece_id INTEGER NOT NULL,
+	melodic_ngram_set_id INTEGER NOT NULL,  -- Reference to melodic_ngram_sets
+	voice INTEGER NOT NULL,
+	voice_name TEXT,                        -- Voice name (Cantus, Altus, Tenor, Bassus, etc.)
+	onset REAL NOT NULL,                    -- N-gram onset time (start time of first interval)
+	ngram TEXT NOT NULL,                    -- The n-gram pattern (comma-separated intervals)
+	ngram_length INTEGER NOT NULL,          -- Length of the n-gram (3, 4, 5, etc.)
+	
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
+	FOREIGN KEY (melodic_ngram_set_id) REFERENCES melodic_ngram_sets (set_id) ON DELETE CASCADE
+);
+
+-- Indexes for melodic_ngrams table
+CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_piece ON melodic_ngrams(piece_id);
+CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_set ON melodic_ngrams(melodic_ngram_set_id);
+CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_voice ON melodic_ngrams(voice);
+CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_onset ON melodic_ngrams(onset);
+CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_pattern ON melodic_ngrams(ngram);
+CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_length ON melodic_ngrams(ngram_length);
