@@ -148,6 +148,27 @@ class PiecesDB:
                 conn.close()
             return []
     
+    def get_all_melodic_interval_sets(self) -> List[Dict]:
+        """Get all melodic interval sets from the database"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT * FROM melodic_interval_sets ORDER BY set_id")
+            rows = cursor.fetchall()
+            
+            columns = [description[0] for description in cursor.description]
+            melodic_sets = [dict(zip(columns, row)) for row in rows]
+            
+            conn.close()
+            return melodic_sets
+            
+        except sqlite3.Error as e:
+            print(f"Database error retrieving melodic interval sets: {e}")
+            if conn:
+                conn.close()
+            return []
+    
     def notes_exist_for_piece_and_set(self, piece_id: int, note_set_id: int) -> bool:
         """Check if notes already exist for a piece and note set combination"""
         try:

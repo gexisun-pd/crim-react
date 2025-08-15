@@ -58,8 +58,10 @@ def parse_crim_interval_to_semitones(interval_str: str) -> Optional[float]:
         print(f"    Warning: Unknown interval format '{interval_str}', setting to None")
         return None
 
-def extract_melodic_intervals_from_piece(file_path: str, piece_id: int) -> Optional[List[Dict]]:
-    """Extract melodic intervals from a piece using cached CRIM DataFrames"""
+def extract_melodic_intervals_from_piece(file_path: str, piece_id: int, melodic_set_id: int, 
+                                        kind: str, combine_unisons: bool, note_set_slug: str, 
+                                        melodic_set_slug: str) -> Optional[List[Dict]]:
+    """Extract melodic intervals from a piece using specific parameters and cached notes"""
     if not CRIM_INTERVALS_AVAILABLE:
         raise ImportError("crim_intervals library is required for melodic intervals extraction")
     
@@ -67,33 +69,34 @@ def extract_melodic_intervals_from_piece(file_path: str, piece_id: int) -> Optio
     piece_key = cache_manager._get_piece_key(filename)
     
     print(f"  Processing melodic intervals for piece: {piece_key}")
+    print(f"    Set: {melodic_set_slug} (kind={kind}, combine_unisons={combine_unisons})")
     
-    # Try to load cached DataFrames first
-    notes_df = cache_manager.load_dataframe(piece_key, 'notes')
+    # Try to load cached melodic intervals first
+    cached_intervals = cache_manager.load_stage_cache('melodic_intervals', 'pkl', melodic_set_slug, piece_key)
     
-    if notes_df is None:
-        print(f"  Error: Required cached DataFrames not found for {piece_key}")
-        print(f"  Please run ingest_notes.py first to cache the DataFrames")
+    if cached_intervals is not None:
+        metadata = cached_intervals.get('metadata', {})
+        print(f"  Using cached melodic intervals from set {melodic_set_slug}")
+        
+        # Convert cached dataframe to list
+        interval_df = cached_intervals.get('intervals')
+        if interval_df is not None and not interval_df.empty:
+            return convert_melodic_intervals_to_list(interval_df, piece_id, melodic_set_id, kind)
+    
+    # Load the corresponding notes from cache
+    notes_cached = cache_manager.load_stage_cache('notes', 'pkl', note_set_slug, piece_key)
+    
+    if notes_cached is None:
+        print(f"  Error: Required notes cache not found for {piece_key} with set {note_set_slug}")
+        print(f"  Please run ingest_notes.py first to cache the notes")
         return []
     
-    print(f"  Using cached DataFrames for melodic intervals extraction")
+    notes_df = notes_cached.get('notes')
+    if notes_df is None or notes_df.empty:
+        print(f"  Error: No notes dataframe found in cache for {piece_key}")
+        return []
     
-    # Check if melodic intervals are already cached (check all types)
-    interval_types = ['quality', 'diatonic', 'chromatic', 'zerobased']
-    cached_intervals = {}
-    all_cached = True
-    
-    for interval_type in interval_types:
-        cache_key = f'melodic_intervals_{interval_type}'
-        cached_df = cache_manager.load_dataframe(piece_key, cache_key)
-        if cached_df is not None:
-            cached_intervals[interval_type] = cached_df
-        else:
-            all_cached = False
-    
-    if all_cached and cached_intervals:
-        print(f"  Using cached melodic intervals DataFrames (all types)")
-        return convert_melodic_intervals_to_list(cached_intervals, piece_id)
+    print(f"  Using cached notes from set {note_set_slug} (combine_unisons={combine_unisons})")
     
     try:
         print(f"  Creating corpus for melodic intervals...")
@@ -109,62 +112,49 @@ def extract_melodic_intervals_from_piece(file_path: str, piece_id: int) -> Optio
         piece = corpus.scores[0]
         
         print(f"  Extracting melodic intervals using CRIM intervals...")
+        print(f"    Kind: {kind}, end=False")
         
-        # Debug: Check the structure of notes_df
-        print(f"  Notes DataFrame columns: {list(notes_df.columns)}")
-        print(f"  Notes DataFrame index: {notes_df.index[:5]}")
-        print(f"  Notes DataFrame shape: {notes_df.shape}")
-        
-        # Extract melodic intervals using different kinds
-        # According to CRIM documentation, we can extract different types of intervals
-        interval_types = {
-            'quality': {'kind': 'q', 'description': 'Diatonic with quality (P8, M3, m3)'},
-            'diatonic': {'kind': 'd', 'description': 'Diatonic without quality (8, 3)'},
-            'chromatic': {'kind': 'c', 'description': 'Chromatic in semitones (12, 6, 0)'},
-            'zerobased': {'kind': 'z', 'description': 'Zero-based diatonic (7, -4, 2)'}
+        # Extract melodic intervals using the specified kind
+        # Map kind to CRIM parameter
+        kind_map = {
+            'quality': 'q',    # Diatonic with quality (P8, M3, m3)
+            'diatonic': 'd'    # Diatonic without quality (8, 3)
         }
         
-        melodic_intervals_dataframes = {}
+        crim_kind = kind_map.get(kind, 'q')
         
-        for interval_name, config in interval_types.items():
-            print(f"  Extracting {interval_name} intervals (kind='{config['kind']}')...")
-            try:
-                # Use end=False to associate intervals with the first note of the pair
-                melodic_df = piece.melodic(kind=config['kind'], end=False)
-                melodic_intervals_dataframes[interval_name] = melodic_df
-                print(f"    {interval_name} intervals shape: {melodic_df.shape}")
-            except Exception as e:
-                print(f"    Error extracting {interval_name} intervals: {e}")
-                melodic_intervals_dataframes[interval_name] = None
+        try:
+            # Use end=False to associate intervals with the first note of the pair
+            melodic_df = piece.melodic(kind=crim_kind, end=False)
+            print(f"    Melodic intervals shape: {melodic_df.shape}")
+            print(f"    Melodic intervals columns: {list(melodic_df.columns)}")
+        except Exception as e:
+            print(f"    Error extracting melodic intervals: {e}")
+            return []
         
-        # Use quality intervals as the primary one for conversion
-        melodic_intervals_df = melodic_intervals_dataframes.get('quality')
-        if melodic_intervals_df is None or melodic_intervals_df.empty:
+        if melodic_df is None or melodic_df.empty:
             print(f"  Warning: No melodic intervals found in {file_path}")
             return []
         
-        print(f"  Melodic intervals DataFrame shape: {melodic_intervals_df.shape}")
-        print(f"  Melodic intervals columns: {list(melodic_intervals_df.columns)}")
-        
-        # Save all types of melodic intervals to cache with metadata
+        # Save melodic intervals to cache with metadata
         metadata = {
             'file_path': file_path,
             'piece_id': piece_id,
-            'extraction_method': 'crim_intervals_melodic_all_types',
-            'based_on_notes_cache': True,
+            'melodic_set_id': melodic_set_id,
+            'kind': kind,
+            'combine_unisons': combine_unisons,
+            'note_set_slug': note_set_slug,
+            'melodic_set_slug': melodic_set_slug,
+            'extraction_method': 'crim_intervals_melodic',
             'end_parameter': False
         }
         
-        # Save each type of melodic intervals to cache
-        for interval_name, df in melodic_intervals_dataframes.items():
-            if df is not None and not df.empty:
-                cache_key = f'melodic_intervals_{interval_name}'
-                cache_manager.save_dataframe(piece_key, cache_key, df, metadata)
-                print(f"    Saved {interval_name} intervals to cache (shape: {df.shape})")
+        # Save to cache
+        data_dict = {'intervals': melodic_df}
+        cache_manager.save_stage_cache('melodic_intervals', 'pkl', melodic_set_slug, piece_key, data_dict, metadata)
+        print(f"  Saved melodic intervals to cache (shape: {melodic_df.shape})")
         
-        print(f"  Saved all melodic intervals DataFrames to cache for {piece_key}")
-        
-        return convert_melodic_intervals_to_list(melodic_intervals_dataframes, piece_id)
+        return convert_melodic_intervals_to_list(melodic_df, piece_id, melodic_set_id, kind)
         
     except Exception as e:
         print(f"  Error extracting melodic intervals from {file_path}: {e}")
@@ -172,42 +162,33 @@ def extract_melodic_intervals_from_piece(file_path: str, piece_id: int) -> Optio
         traceback.print_exc()
         raise
 
-def convert_melodic_intervals_to_list(intervals_dataframes: Dict, piece_id: int) -> List[Dict]:
-    """Convert multiple melodic intervals DataFrames to list of dictionaries"""
+def convert_melodic_intervals_to_list(melodic_df: pd.DataFrame, piece_id: int, melodic_set_id: int, kind: str) -> List[Dict]:
+    """Convert melodic intervals DataFrame to list of dictionaries"""
     intervals_list = []
     
-    # Use quality intervals as the primary reference for timing and structure
-    primary_df = intervals_dataframes.get('quality')
-    if primary_df is None or primary_df.empty:
-        print(f"  Warning: No quality intervals found, trying other types...")
-        for interval_type, df in intervals_dataframes.items():
-            if df is not None and not df.empty:
-                primary_df = df
-                break
-    
-    if primary_df is None or primary_df.empty:
-        print(f"  Error: No valid interval dataframes found")
+    if melodic_df is None or melodic_df.empty:
+        print(f"  Error: No valid interval dataframe found")
         return []
     
-    print(f"  Converting melodic intervals DataFrames to list...")
-    print(f"  Primary DataFrame columns: {list(primary_df.columns)}")
-    print(f"  Primary DataFrame index: {primary_df.index.names if hasattr(primary_df.index, 'names') else 'Single index'}")
+    print(f"  Converting melodic intervals DataFrame to list...")
+    print(f"  DataFrame columns: {list(melodic_df.columns)}")
+    print(f"  DataFrame index: {melodic_df.index.names if hasattr(melodic_df.index, 'names') else 'Single index'}")
     
     # Get voice columns (exclude metadata columns)
     metadata_cols = ['Measure', 'Beat', 'Offset', 'Composer', 'Title', 'Date']
-    voice_columns = [col for col in primary_df.columns if col not in metadata_cols]
+    voice_columns = [col for col in melodic_df.columns if col not in metadata_cols]
     
     print(f"  Voice columns found: {voice_columns}")
     
-    # Iterate through each row (time point) of the primary DataFrame
-    for idx, row in primary_df.iterrows():
+    # Iterate through each row (time point) of the DataFrame
+    for idx, row in melodic_df.iterrows():
         # Extract timing information
         offset = idx
         measure = None
         beat = None
         
         # Check if we have multi-index or columns with timing info
-        if isinstance(primary_df.index, pd.MultiIndex):
+        if isinstance(melodic_df.index, pd.MultiIndex):
             # Multi-index case (Offset, Measure, Beat)
             if len(idx) >= 1:
                 offset = idx[0]
@@ -217,80 +198,76 @@ def convert_melodic_intervals_to_list(intervals_dataframes: Dict, piece_id: int)
                 beat = idx[2]
         else:
             # Single index, check for timing columns
-            if 'Measure' in primary_df.columns:
+            if 'Measure' in melodic_df.columns:
                 measure = row.get('Measure')
-            if 'Beat' in primary_df.columns:
+            if 'Beat' in melodic_df.columns:
                 beat = row.get('Beat')
-            if 'Offset' in primary_df.columns:
+            if 'Offset' in melodic_df.columns:
                 offset = row.get('Offset')
         
         # Process each voice at this time point
         for voice_idx, voice_name in enumerate(voice_columns, 1):
-            # Check if any of the interval types have a non-null value for this voice at this time
-            has_interval = False
-            interval_values = {}
+            interval_value = melodic_df.loc[idx, voice_name]
             
-            # Collect interval values from all types
-            for interval_type, df in intervals_dataframes.items():
-                if df is not None and not df.empty and idx in df.index and voice_name in df.columns:
-                    interval_value = df.loc[idx, voice_name]
-                    if not pd.isna(interval_value) and interval_value != '' and interval_value is not None:
-                        interval_values[interval_type] = interval_value
-                        has_interval = True
-            
-            # Skip if no intervals found for this voice at this time
-            if not has_interval:
+            # Skip if no interval value
+            if pd.isna(interval_value) or interval_value == '' or interval_value is None:
                 continue
             
-            # Parse interval information from quality intervals (preferred) or chromatic as fallback
-            primary_interval = interval_values.get('quality') or interval_values.get('chromatic')
+            # Parse interval information based on kind
             interval_semitones = None
             interval_type = None
             interval_direction = None
             interval_quality = None
             
             try:
-                if isinstance(primary_interval, (int, float)):
-                    # Numeric format (semitones) - from chromatic
-                    interval_semitones = float(primary_interval)
-                    interval_type = f"{interval_semitones} semitones"
-                    
-                    # Determine direction
-                    if interval_semitones > 0:
-                        interval_direction = "ascending"
-                    elif interval_semitones < 0:
-                        interval_direction = "descending"
-                    else:
-                        interval_direction = "unison"
+                if kind == 'diatonic':
+                    # Diatonic intervals are numeric (e.g., 3, -2, 8)
+                    if isinstance(interval_value, (int, float)):
+                        diatonic_number = int(interval_value)
+                        interval_type = f"diatonic {abs(diatonic_number)}"
+                        
+                        # Approximate conversion to semitones (basic mapping)
+                        diatonic_to_semitones = {1: 0, 2: 2, 3: 4, 4: 5, 5: 7, 6: 9, 7: 11, 8: 12}
+                        base_semitones = diatonic_to_semitones.get(abs(diatonic_number) % 8, 0)
+                        octaves = abs(diatonic_number) // 8
+                        interval_semitones = base_semitones + (octaves * 12)
+                        
+                        if diatonic_number < 0:
+                            interval_semitones = -interval_semitones
+                            interval_direction = "descending"
+                        elif diatonic_number == 0 or abs(diatonic_number) == 1:
+                            interval_direction = "unison"
+                        else:
+                            interval_direction = "ascending"
                 
-                elif isinstance(primary_interval, str) and primary_interval not in ['Rest', 'NaN', '']:
-                    # String format (like 'P1', 'm2', 'M3', '-m2') - from quality
-                    interval_type = str(primary_interval)
-                    
-                    # Parse CRIM interval notation
-                    interval_semitones = parse_crim_interval_to_semitones(primary_interval)
-                    
-                    # Determine direction from interval string
-                    if primary_interval.startswith('-'):
-                        interval_direction = "descending"
-                    elif primary_interval in ['P1', 'P8', 'P15']:  # Unisons and octaves
-                        interval_direction = "unison"
-                    else:
-                        interval_direction = "ascending"
+                elif kind == 'quality':
+                    # Quality intervals are strings (e.g., 'P1', 'm2', 'M3', '-m2')
+                    if isinstance(interval_value, str) and interval_value not in ['Rest', 'NaN', '']:
+                        interval_type = str(interval_value)
+                        
+                        # Parse CRIM interval notation
+                        interval_semitones = parse_crim_interval_to_semitones(interval_value)
+                        
+                        # Determine direction from interval string
+                        if interval_value.startswith('-'):
+                            interval_direction = "descending"
+                        elif interval_value in ['P1', 'P8', 'P15']:  # Unisons and octaves
+                            interval_direction = "unison"
+                        else:
+                            interval_direction = "ascending"
                 
                 else:
-                    # Handle Rest, NaN, or other special values
-                    interval_type = str(primary_interval)
-                    interval_semitones = None
-                    interval_direction = None
-                
+                    # Handle other formats or unknown types
+                    interval_type = str(interval_value)
+                    
             except Exception as e:
-                print(f"    Warning: Could not parse interval '{primary_interval}': {e}")
-                interval_type = str(primary_interval)
+                print(f"    Warning: Could not parse interval '{interval_value}': {e}")
+                interval_type = str(interval_value)
             
-            # Create interval record with all interval types
+            # Create interval record
             interval_data = {
                 'piece_id': piece_id,
+                'melodic_interval_set_id': melodic_set_id,
                 'voice': voice_idx,
                 'onset': float(offset),
                 'measure': int(measure) if measure is not None and pd.notna(measure) else None,
@@ -303,11 +280,11 @@ def convert_melodic_intervals_to_list(intervals_dataframes: Dict, piece_id: int)
                 'note_id': None,  # Simplified - no note matching for now
                 'next_note_id': None,  # Simplified - no note matching for now
                 
-                # Add all interval types as separate fields
-                'interval_quality_notation': interval_values.get('quality'),
-                'interval_diatonic_notation': interval_values.get('diatonic'),
-                'interval_chromatic_notation': interval_values.get('chromatic'),
-                'interval_zerobased_notation': interval_values.get('zerobased')
+                # Store the interval notation based on kind
+                'interval_quality_notation': interval_value if kind == 'quality' else None,
+                'interval_diatonic_notation': interval_value if kind == 'diatonic' else None,
+                'interval_chromatic_notation': None,  # Not used in this version
+                'interval_zerobased_notation': None   # Not used in this version
             }
             
             intervals_list.append(interval_data)
@@ -323,6 +300,7 @@ def create_melodic_intervals_table():
     CREATE TABLE IF NOT EXISTS melodic_intervals (
         interval_id INTEGER PRIMARY KEY AUTOINCREMENT,
         piece_id INTEGER NOT NULL,
+        melodic_interval_set_id INTEGER NOT NULL,
         note_id INTEGER,                 -- Associated note_id (start note) - simplified, set to NULL for now
         next_note_id INTEGER,            -- Associated note_id (end note) - simplified, set to NULL for now
         voice INTEGER NOT NULL,
@@ -343,11 +321,13 @@ def create_melodic_intervals_table():
         
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
+        FOREIGN KEY (melodic_interval_set_id) REFERENCES melodic_interval_sets (set_id) ON DELETE CASCADE,
         FOREIGN KEY (note_id) REFERENCES notes (note_id) ON DELETE SET NULL,
         FOREIGN KEY (next_note_id) REFERENCES notes (note_id) ON DELETE SET NULL
     );
     
     CREATE INDEX IF NOT EXISTS idx_melodic_intervals_piece ON melodic_intervals(piece_id);
+    CREATE INDEX IF NOT EXISTS idx_melodic_intervals_set ON melodic_intervals(melodic_interval_set_id);
     CREATE INDEX IF NOT EXISTS idx_melodic_intervals_voice ON melodic_intervals(voice);
     CREATE INDEX IF NOT EXISTS idx_melodic_intervals_onset ON melodic_intervals(onset);
     CREATE INDEX IF NOT EXISTS idx_melodic_intervals_note ON melodic_intervals(note_id);
@@ -379,17 +359,18 @@ def insert_melodic_intervals_batch(intervals_list: List[Dict]) -> int:
     
     insert_sql = """
     INSERT INTO melodic_intervals (
-        piece_id, note_id, next_note_id, voice, onset, measure, beat, 
+        piece_id, melodic_interval_set_id, note_id, next_note_id, voice, onset, measure, beat, 
         interval_semitones, interval_type, interval_direction, interval_quality, voice_name,
         interval_quality_notation, interval_diatonic_notation, 
         interval_chromatic_notation, interval_zerobased_notation
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     
     values_list = []
     for interval in intervals_list:
         values = (
             interval.get('piece_id'),
+            interval.get('melodic_interval_set_id'),
             interval.get('note_id'),
             interval.get('next_note_id'),
             interval.get('voice'),
@@ -423,15 +404,18 @@ def insert_melodic_intervals_batch(intervals_list: List[Dict]) -> int:
             conn.close()
         return 0
 
-def melodic_intervals_exist_for_piece(piece_id: int) -> bool:
-    """Check if melodic intervals already exist for a piece"""
+def melodic_intervals_exist_for_piece_and_set(piece_id: int, melodic_set_id: int) -> bool:
+    """Check if melodic intervals already exist for a piece and melodic interval set"""
     db = PiecesDB()
     
     try:
         import sqlite3
         conn = sqlite3.connect(db.db_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM melodic_intervals WHERE piece_id = ?", (piece_id,))
+        cursor.execute("""
+            SELECT COUNT(*) FROM melodic_intervals 
+            WHERE piece_id = ? AND melodic_interval_set_id = ?
+        """, (piece_id, melodic_set_id))
         count = cursor.fetchone()[0]
         conn.close()
         return count > 0
@@ -442,7 +426,7 @@ def melodic_intervals_exist_for_piece(piece_id: int) -> bool:
         return False
 
 def ingest_melodic_intervals_for_all_pieces():
-    """Main function to ingest melodic intervals for all pieces in the database"""
+    """Main function to ingest melodic intervals for all pieces using all melodic interval sets"""
     
     # Check if crim_intervals is available before proceeding
     if not CRIM_INTERVALS_AVAILABLE:
@@ -467,69 +451,130 @@ def ingest_melodic_intervals_for_all_pieces():
     
     print(f"Found {len(pieces)} pieces in database")
     
+    # Get all melodic interval sets
+    print("Retrieving all melodic interval sets...")
+    melodic_sets = db.get_all_melodic_interval_sets()
+    
+    if not melodic_sets:
+        print("No melodic interval sets found in database.")
+        print("Please run core/db/init_db.py first to create parameter sets.")
+        return
+    
+    print(f"Found {len(melodic_sets)} melodic interval sets:")
+    for melodic_set in melodic_sets:
+        print(f"  Set {melodic_set['set_id']}: {melodic_set['slug']} (kind={melodic_set['kind']}, note_set_id={melodic_set['note_set_id']})")
+    
     # Get project root directory (two levels up from core/ingest/)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     data_root = os.path.join(project_root, 'data')
     
+    total_combinations = len(pieces) * len(melodic_sets)
     processed_count = 0
     skipped_count = 0
     error_count = 0
     total_intervals = 0
     
-    # Process each piece
-    for piece in pieces:
-        piece_id = piece['piece_id']
-        piece_path = piece['path']
-        piece_filename = piece['filename']
-        
-        print(f"\nProcessing melodic intervals for piece {piece_id}: {piece_filename}")
-        
-        try:
-            # Check if melodic intervals already exist for this piece
-            if melodic_intervals_exist_for_piece(piece_id):
-                print(f"  Skipping - melodic intervals already exist for piece {piece_id}")
-                skipped_count += 1
-                continue
-            
-            # Construct full file path
-            full_file_path = os.path.join(data_root, piece_path)
-            
-            if not os.path.exists(full_file_path):
-                print(f"  Error: File not found: {full_file_path}")
-                error_count += 1
-                continue
-            
-            # Extract melodic intervals from the piece
-            intervals_list = extract_melodic_intervals_from_piece(full_file_path, piece_id)
-            
-            if not intervals_list:
-                print(f"  Warning: No melodic intervals extracted from {piece_filename}")
-                processed_count += 1  # Still count as processed
-                continue
-            
-            # Insert melodic intervals into database
-            print(f"  Inserting {len(intervals_list)} melodic intervals into database...")
-            success_count = insert_melodic_intervals_batch(intervals_list)
-            
-            if success_count == len(intervals_list):
-                print(f"  Successfully inserted {success_count} melodic intervals")
-                processed_count += 1
-                total_intervals += success_count
-            else:
-                print(f"  Warning: Only {success_count}/{len(intervals_list)} melodic intervals inserted")
-                error_count += 1
-                
-        except Exception as e:
-            print(f"  Error processing piece {piece_id}: {e}")
-            error_count += 1
-            continue
+    print(f"\n=== Processing {total_combinations} combinations (pieces × melodic sets) ===")
     
-    # Print summary
-    print(f"\n=== Melodic Intervals Ingestion Summary ===")
-    print(f"Total pieces found: {len(pieces)}")
-    print(f"Successfully processed: {processed_count}")
-    print(f"Skipped (already exists): {skipped_count}")
-    print(f"Errors: {error_count}")
+    # Process each melodic interval set
+    for melodic_set in melodic_sets:
+        melodic_set_id = melodic_set['set_id']
+        melodic_slug = melodic_set['slug']
+        kind = melodic_set['kind']
+        note_set_id = melodic_set['note_set_id']
+        
+        # Get the corresponding note set to find combine_unisons value
+        note_sets = db.get_all_note_sets()
+        note_set = next((ns for ns in note_sets if ns['set_id'] == note_set_id), None)
+        if not note_set:
+            print(f"Error: Could not find note set with id {note_set_id}")
+            continue
+            
+        combine_unisons = note_set['combine_unisons']
+        note_set_slug = note_set['slug']
+        
+        print(f"\n--- Processing Melodic Interval Set {melodic_set_id}: {melodic_slug} ---")
+        print(f"Kind: {kind}, Combine Unisons: {combine_unisons}")
+        print(f"Using notes from set: {note_set_slug}")
+        
+        set_processed = 0
+        set_skipped = 0
+        set_errors = 0
+        set_intervals = 0
+        
+        # Process each piece with this melodic interval set
+        for i, piece in enumerate(pieces, 1):
+            piece_id = piece['piece_id']
+            piece_path = piece['path']
+            piece_filename = piece['filename']
+            
+            print(f"Processing piece {i}: {piece_filename} (Set {melodic_set_id})")
+            
+            try:
+                # Check if melodic intervals already exist for this piece and set
+                if melodic_intervals_exist_for_piece_and_set(piece_id, melodic_set_id):
+                    print(f"  Skipping - melodic intervals already exist for piece {piece_id} with set {melodic_set_id}")
+                    skipped_count += 1
+                    set_skipped += 1
+                    continue
+                
+                # Construct full file path
+                full_file_path = os.path.join(data_root, piece_path)
+                
+                if not os.path.exists(full_file_path):
+                    print(f"  Error: File not found: {full_file_path}")
+                    error_count += 1
+                    set_errors += 1
+                    continue
+                
+                # Extract melodic intervals from the piece
+                intervals_list = extract_melodic_intervals_from_piece(
+                    full_file_path, piece_id, melodic_set_id, kind, combine_unisons, 
+                    note_set_slug, melodic_slug
+                )
+                
+                if not intervals_list:
+                    print(f"  Warning: No melodic intervals extracted from {piece_filename}")
+                    processed_count += 1  # Still count as processed
+                    set_processed += 1
+                    continue
+                
+                # Insert melodic intervals into database
+                print(f"  Inserting {len(intervals_list)} melodic intervals into database...")
+                success_count = insert_melodic_intervals_batch(intervals_list)
+                
+                if success_count == len(intervals_list):
+                    print(f"  Successfully inserted {success_count} melodic intervals")
+                    processed_count += 1
+                    set_processed += 1
+                    total_intervals += success_count
+                    set_intervals += success_count
+                else:
+                    print(f"  Warning: Only {success_count}/{len(intervals_list)} melodic intervals inserted")
+                    error_count += 1
+                    set_errors += 1
+                    
+            except Exception as e:
+                print(f"  Error processing piece {piece_id}: {e}")
+                error_count += 1
+                set_errors += 1
+                continue
+        
+        # Print set summary
+        print(f"\n--- Set {melodic_set_id} Summary ---")
+        print(f"Successfully processed: {set_processed}")
+        print(f"Skipped (already exists): {set_skipped}")
+        print(f"Errors: {set_errors}")
+        print(f"Intervals inserted: {set_intervals}")
+    
+    # Print overall summary
+    print(f"\n============================================================")
+    print(f"=== Overall Melodic Intervals Ingestion Summary ===")
+    print(f"Total melodic interval sets: {len(melodic_sets)}")
+    print(f"Total pieces: {len(pieces)}")
+    print(f"Total combinations processed: {processed_count}")
+    print(f"Total combinations skipped: {skipped_count}")
+    print(f"Total errors: {error_count}")
     print(f"Total melodic intervals inserted: {total_intervals}")
     
     # Print cache statistics

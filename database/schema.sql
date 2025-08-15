@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS parameter_sets (
 CREATE TABLE IF NOT EXISTS melodic_intervals (
 	interval_id INTEGER PRIMARY KEY AUTOINCREMENT,
 	piece_id INTEGER NOT NULL,
+	melodic_interval_set_id INTEGER NOT NULL, -- 关联到melodic_interval_sets表
 	note_id INTEGER,                 -- 关联到notes表的note_id (起始音符)
 	next_note_id INTEGER,            -- 关联到notes表的note_id (结束音符)
 	voice INTEGER NOT NULL,
@@ -91,12 +92,14 @@ CREATE TABLE IF NOT EXISTS melodic_intervals (
 	
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
+	FOREIGN KEY (melodic_interval_set_id) REFERENCES melodic_interval_sets (set_id) ON DELETE CASCADE,
 	FOREIGN KEY (note_id) REFERENCES notes (note_id) ON DELETE SET NULL,
 	FOREIGN KEY (next_note_id) REFERENCES notes (note_id) ON DELETE SET NULL
 );
 
 -- Indexes for melodic_intervals table
 CREATE INDEX IF NOT EXISTS idx_melodic_intervals_piece ON melodic_intervals(piece_id);
+CREATE INDEX IF NOT EXISTS idx_melodic_intervals_set ON melodic_intervals(melodic_interval_set_id);
 CREATE INDEX IF NOT EXISTS idx_melodic_intervals_voice ON melodic_intervals(voice);
 CREATE INDEX IF NOT EXISTS idx_melodic_intervals_onset ON melodic_intervals(onset);
 CREATE INDEX IF NOT EXISTS idx_melodic_intervals_note ON melodic_intervals(note_id);
