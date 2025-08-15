@@ -31,6 +31,21 @@ CREATE TABLE IF NOT EXISTS melodic_interval_sets (
 	UNIQUE(kind, note_set_id)
 );
 
+-- Table: melodic_ngram_sets
+CREATE TABLE IF NOT EXISTS melodic_ngram_sets (
+	set_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	melodic_interval_set_id INTEGER NOT NULL, -- Reference to melodic_interval_sets
+	ngrams_number INTEGER NOT NULL,  -- Number of n-grams (3-10)
+	ngrams_entry BOOLEAN NOT NULL,   -- Whether to include entry points
+	parent_set_id INTEGER,           -- Reference to parent set (only for entry=1, points to entry=0 set)
+	slug TEXT NOT NULL UNIQUE,       -- Short identifier: cT_kq_n3, cF_kd_n5, etc.
+	description TEXT NOT NULL,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (melodic_interval_set_id) REFERENCES melodic_interval_sets (set_id) ON DELETE CASCADE,
+	FOREIGN KEY (parent_set_id) REFERENCES melodic_ngram_sets (set_id) ON DELETE CASCADE,
+	UNIQUE(melodic_interval_set_id, ngrams_number, ngrams_entry)
+);
+
 -- Table: notes
 CREATE TABLE IF NOT EXISTS notes (
 	note_id INTEGER PRIMARY KEY AUTOINCREMENT,

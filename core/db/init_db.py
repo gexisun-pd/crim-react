@@ -32,8 +32,11 @@ def init_database():
     # Generate and insert note_sets (combination of notes_combine_unisons)
     create_note_sets(cursor)
     
-    # Generate and insert melodic_interval_sets (combination of melodic_intervals_kind and melodic_ngrams_number)
+    # Generate and insert melodic_interval_sets (combination of melodic_intervals_kind and note_sets)
     create_melodic_interval_sets(cursor)
+    
+    # Generate and insert melodic_ngram_sets (combination of melodic_interval_sets and ngrams parameters)
+    create_melodic_ngram_sets(cursor)
     
     conn.commit()
     conn.close()
@@ -107,6 +110,70 @@ def create_melodic_interval_sets(cursor):
     
     count = cursor.rowcount
     print(f"Created {count} melodic interval sets")
+
+def create_melodic_ngram_sets(cursor):
+    """Create melodic_ngram_sets table with all combinations of melodic_interval_sets and ngram parameters"""
+    # Drop and recreate melodic_ngram_sets table
+    cursor.execute('DROP TABLE IF EXISTS melodic_ngram_sets')
+    cursor.execute('''
+        CREATE TABLE melodic_ngram_sets (
+            set_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            melodic_interval_set_id INTEGER NOT NULL,
+            ngrams_number INTEGER NOT NULL,
+            ngrams_entry BOOLEAN NOT NULL,
+            parent_set_id INTEGER,
+            slug TEXT NOT NULL UNIQUE,
+            description TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(melodic_interval_set_id, ngrams_number, ngrams_entry),
+            FOREIGN KEY (melodic_interval_set_id) REFERENCES melodic_interval_sets (set_id) ON DELETE CASCADE,
+            FOREIGN KEY (parent_set_id) REFERENCES melodic_ngram_sets (set_id) ON DELETE CASCADE
+        )
+    ''')
+    
+    # Get all melodic_interval_sets first
+    cursor.execute('SELECT set_id, slug, kind FROM melodic_interval_sets')
+    melodic_interval_sets = cursor.fetchall()
+    
+    # First, create all parent sets (ngrams_entry = False)
+    parent_sets = {}  # key: (interval_set_id, ngrams_number), value: set_id
+    
+    for (interval_set_id, interval_slug, kind), ngrams_number in itertools.product(
+        melodic_interval_sets, CONFIG['melodic_ngrams_number']
+    ):
+        entry_abbrev = "eF"  # Always False for parent sets
+        slug = f"{interval_slug}_n{ngrams_number}_{entry_abbrev}"
+        description = f"{interval_slug}_ngrams{ngrams_number}_entryFalse"
+        
+        cursor.execute('''
+            INSERT INTO melodic_ngram_sets (melodic_interval_set_id, ngrams_number, ngrams_entry, parent_set_id, slug, description)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (interval_set_id, ngrams_number, False, None, slug, description))
+        
+        # Store the parent set_id for later reference
+        parent_set_id = cursor.lastrowid
+        parent_sets[(interval_set_id, ngrams_number)] = parent_set_id
+    
+    # Then, create all child sets (ngrams_entry = True) with parent_set_id
+    for (interval_set_id, interval_slug, kind), ngrams_number in itertools.product(
+        melodic_interval_sets, CONFIG['melodic_ngrams_number']
+    ):
+        # Get the corresponding parent set_id
+        parent_set_id = parent_sets[(interval_set_id, ngrams_number)]
+        
+        entry_abbrev = "eT"  # Always True for child sets
+        slug = f"{interval_slug}_n{ngrams_number}_{entry_abbrev}"
+        description = f"{interval_slug}_ngrams{ngrams_number}_entryTrue"
+        
+        cursor.execute('''
+            INSERT INTO melodic_ngram_sets (melodic_interval_set_id, ngrams_number, ngrams_entry, parent_set_id, slug, description)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (interval_set_id, ngrams_number, True, parent_set_id, slug, description))
+    
+    # Count total created sets
+    cursor.execute('SELECT COUNT(*) FROM melodic_ngram_sets')
+    total_count = cursor.fetchone()[0]
+    print(f"Created {total_count} melodic ngram sets ({total_count//2} parent sets, {total_count//2} child sets)")
 
 if __name__ == "__main__":
     init_database()
