@@ -117,11 +117,12 @@ def extract_melodic_intervals_from_piece(file_path: str, piece_id: int, melodic_
         # Extract melodic intervals using the specified kind
         # Map kind to CRIM parameter
         kind_map = {
-            'quality': 'q',    # Diatonic with quality (P8, M3, m3)
-            'diatonic': 'd'    # Diatonic without quality (8, 3)
+            'quality': 'q',    # Diatonic with quality (P8, M3, m3, -m2, etc.)
+            'diatonic': 'd'    # Diatonic without quality (8, 3, -2, etc.)
         }
         
         crim_kind = kind_map.get(kind, 'q')
+        print(f"    CRIM kind parameter: {crim_kind}")
         
         try:
             # Use end=False to associate intervals with the first note of the pair
@@ -163,7 +164,15 @@ def extract_melodic_intervals_from_piece(file_path: str, piece_id: int, melodic_
         raise
 
 def convert_melodic_intervals_to_list(melodic_df: pd.DataFrame, piece_id: int, melodic_set_id: int, kind: str) -> List[Dict]:
-    """Convert melodic intervals DataFrame to list of dictionaries"""
+    """
+    Convert melodic intervals DataFrame to list of dictionaries
+    
+    This function processes CRIM's melodic interval output:
+    - For kind='quality': CRIM returns strings like 'P1', 'M3', 'm3', '-m2', etc.
+    - For kind='diatonic': CRIM returns numbers like 1, 3, -2, 8, etc.
+    
+    We store the raw CRIM output and add analysis fields like direction and semitones.
+    """
     intervals_list = []
     
     if melodic_df is None or melodic_df.empty:
@@ -216,45 +225,51 @@ def convert_melodic_intervals_to_list(melodic_df: pd.DataFrame, piece_id: int, m
             # Parse interval information based on kind
             interval_semitones = None
             interval_type = None
-            interval_direction = None
             interval_quality = None
             
             try:
                 if kind == 'diatonic':
-                    # Diatonic intervals are numeric (e.g., 3, -2, 8)
+                    # Diatonic intervals from CRIM are already in the correct format (e.g., "3", "-2", "8")
+                    # We just store them as-is and determine direction
+                    interval_type = str(interval_value)
+                    
+                    # Determine direction from the value
                     if isinstance(interval_value, (int, float)):
                         diatonic_number = int(interval_value)
-                        interval_type = f"diatonic {abs(diatonic_number)}"
-                        
-                        # Approximate conversion to semitones (basic mapping)
-                        diatonic_to_semitones = {1: 0, 2: 2, 3: 4, 4: 5, 5: 7, 6: 9, 7: 11, 8: 12}
-                        base_semitones = diatonic_to_semitones.get(abs(diatonic_number) % 8, 0)
-                        octaves = abs(diatonic_number) // 8
-                        interval_semitones = base_semitones + (octaves * 12)
-                        
                         if diatonic_number < 0:
-                            interval_semitones = -interval_semitones
                             interval_direction = "descending"
                         elif diatonic_number == 0 or abs(diatonic_number) == 1:
                             interval_direction = "unison"
                         else:
                             interval_direction = "ascending"
-                
-                elif kind == 'quality':
-                    # Quality intervals are strings (e.g., 'P1', 'm2', 'M3', '-m2')
-                    if isinstance(interval_value, str) and interval_value not in ['Rest', 'NaN', '']:
-                        interval_type = str(interval_value)
-                        
-                        # Parse CRIM interval notation
-                        interval_semitones = parse_crim_interval_to_semitones(interval_value)
-                        
-                        # Determine direction from interval string
-                        if interval_value.startswith('-'):
+                    else:
+                        # Handle string values
+                        str_value = str(interval_value)
+                        if str_value.startswith('-'):
                             interval_direction = "descending"
-                        elif interval_value in ['P1', 'P8', 'P15']:  # Unisons and octaves
+                        elif str_value in ['0', '1']:
                             interval_direction = "unison"
                         else:
                             interval_direction = "ascending"
+                    
+                    # For diatonic intervals, we don't convert to semitones since CRIM provides the raw diatonic number
+                    interval_semitones = None
+                
+                elif kind == 'quality':
+                    # Quality intervals from CRIM are already in the correct format (e.g., 'P1', 'm2', 'M3', '-m2')
+                    # We just store them as-is and optionally convert to semitones for analysis
+                    interval_type = str(interval_value)
+                    
+                    # Parse CRIM interval notation to semitones for analysis purposes
+                    interval_semitones = parse_crim_interval_to_semitones(interval_value)
+                    
+                    # Determine direction from interval string
+                    if str(interval_value).startswith('-'):
+                        interval_direction = "descending"
+                    elif str(interval_value) in ['P1', 'P8', 'P15']:  # Unisons and octaves
+                        interval_direction = "unison"
+                    else:
+                        interval_direction = "ascending"
                 
                 else:
                     # Handle other formats or unknown types
@@ -270,21 +285,8 @@ def convert_melodic_intervals_to_list(melodic_df: pd.DataFrame, piece_id: int, m
                 'melodic_interval_set_id': melodic_set_id,
                 'voice': voice_idx,
                 'onset': float(offset),
-                'measure': int(measure) if measure is not None and pd.notna(measure) else None,
-                'beat': float(beat) if beat is not None and pd.notna(beat) else None,
-                'interval_semitones': interval_semitones,
                 'interval_type': interval_type,
-                'interval_direction': interval_direction,
-                'interval_quality': interval_quality,
-                'voice_name': voice_name,
-                'note_id': None,  # Simplified - no note matching for now
-                'next_note_id': None,  # Simplified - no note matching for now
-                
-                # Store the interval notation based on kind
-                'interval_quality_notation': interval_value if kind == 'quality' else None,
-                'interval_diatonic_notation': interval_value if kind == 'diatonic' else None,
-                'interval_chromatic_notation': None,  # Not used in this version
-                'interval_zerobased_notation': None   # Not used in this version
+                'voice_name': voice_name
             }
             
             intervals_list.append(interval_data)
@@ -301,39 +303,20 @@ def create_melodic_intervals_table():
         interval_id INTEGER PRIMARY KEY AUTOINCREMENT,
         piece_id INTEGER NOT NULL,
         melodic_interval_set_id INTEGER NOT NULL,
-        note_id INTEGER,                 -- Associated note_id (start note) - simplified, set to NULL for now
-        next_note_id INTEGER,            -- Associated note_id (end note) - simplified, set to NULL for now
         voice INTEGER NOT NULL,
         onset REAL NOT NULL,             -- Interval onset time
-        measure INTEGER,
-        beat REAL,
-        interval_semitones REAL,         -- Interval in semitones (from chromatic or parsed from quality)
-        interval_type TEXT,              -- Primary interval type description
-        interval_direction TEXT,         -- Interval direction: "ascending", "descending", "unison"
-        interval_quality TEXT,           -- Interval quality
+        interval_type TEXT,              -- CRIM raw output (P1, m2, M3 or 1, 2, 3)
         voice_name TEXT,                 -- Voice name
-        
-        -- CRIM interval notations for all types
-        interval_quality_notation TEXT,     -- Diatonic with quality (P8, M3, m3)
-        interval_diatonic_notation TEXT,    -- Diatonic without quality (8, 3)
-        interval_chromatic_notation TEXT,   -- Chromatic in semitones (12, 6, 0)
-        interval_zerobased_notation TEXT,   -- Zero-based diatonic (7, -4, 2)
         
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
-        FOREIGN KEY (melodic_interval_set_id) REFERENCES melodic_interval_sets (set_id) ON DELETE CASCADE,
-        FOREIGN KEY (note_id) REFERENCES notes (note_id) ON DELETE SET NULL,
-        FOREIGN KEY (next_note_id) REFERENCES notes (note_id) ON DELETE SET NULL
+        FOREIGN KEY (melodic_interval_set_id) REFERENCES melodic_interval_sets (set_id) ON DELETE CASCADE
     );
     
     CREATE INDEX IF NOT EXISTS idx_melodic_intervals_piece ON melodic_intervals(piece_id);
     CREATE INDEX IF NOT EXISTS idx_melodic_intervals_set ON melodic_intervals(melodic_interval_set_id);
     CREATE INDEX IF NOT EXISTS idx_melodic_intervals_voice ON melodic_intervals(voice);
     CREATE INDEX IF NOT EXISTS idx_melodic_intervals_onset ON melodic_intervals(onset);
-    CREATE INDEX IF NOT EXISTS idx_melodic_intervals_note ON melodic_intervals(note_id);
-    CREATE INDEX IF NOT EXISTS idx_melodic_intervals_next_note ON melodic_intervals(next_note_id);
-    CREATE INDEX IF NOT EXISTS idx_melodic_intervals_semitones ON melodic_intervals(interval_semitones);
-    CREATE INDEX IF NOT EXISTS idx_melodic_intervals_direction ON melodic_intervals(interval_direction);
     """
     
     try:
@@ -359,33 +342,18 @@ def insert_melodic_intervals_batch(intervals_list: List[Dict]) -> int:
     
     insert_sql = """
     INSERT INTO melodic_intervals (
-        piece_id, melodic_interval_set_id, note_id, next_note_id, voice, onset, measure, beat, 
-        interval_semitones, interval_type, interval_direction, interval_quality, voice_name,
-        interval_quality_notation, interval_diatonic_notation, 
-        interval_chromatic_notation, interval_zerobased_notation
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        piece_id, melodic_interval_set_id, voice, onset, interval_type, voice_name
+    ) VALUES (?, ?, ?, ?, ?, ?)
     """
-    
     values_list = []
     for interval in intervals_list:
         values = (
             interval.get('piece_id'),
             interval.get('melodic_interval_set_id'),
-            interval.get('note_id'),
-            interval.get('next_note_id'),
             interval.get('voice'),
             interval.get('onset'),
-            interval.get('measure'),
-            interval.get('beat'),
-            interval.get('interval_semitones'),
             interval.get('interval_type'),
-            interval.get('interval_direction'),
-            interval.get('interval_quality'),
-            interval.get('voice_name'),
-            interval.get('interval_quality_notation'),
-            interval.get('interval_diatonic_notation'),
-            interval.get('interval_chromatic_notation'),
-            interval.get('interval_zerobased_notation')
+            interval.get('voice_name')
         )
         values_list.append(values)
     
