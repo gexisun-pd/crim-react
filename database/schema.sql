@@ -66,10 +66,20 @@ CREATE TABLE IF NOT EXISTS notes (
 	type TEXT,                       -- 音符类型: Note, Rest (CRIM: type)
 	staff INTEGER,                   -- 谱表编号 (CRIM: staff)
 	tie TEXT,                        -- 连音线信息 (CRIM: tie)
+	is_entry BOOLEAN DEFAULT 0,      -- 是否为入点音符 (entry point)
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
 	FOREIGN KEY (note_set_id) REFERENCES note_sets (set_id) ON DELETE CASCADE
 );
+
+-- Indexes for notes table
+CREATE INDEX IF NOT EXISTS idx_notes_piece ON notes(piece_id);
+CREATE INDEX IF NOT EXISTS idx_notes_set ON notes(note_set_id);
+CREATE INDEX IF NOT EXISTS idx_notes_voice ON notes(voice);
+CREATE INDEX IF NOT EXISTS idx_notes_onset ON notes(onset);
+CREATE INDEX IF NOT EXISTS idx_notes_pitch ON notes(pitch);
+CREATE INDEX IF NOT EXISTS idx_notes_type ON notes(type);
+CREATE INDEX IF NOT EXISTS idx_notes_is_entry ON notes(is_entry);
 
 -- Table: parameter_sets
 CREATE TABLE IF NOT EXISTS parameter_sets (

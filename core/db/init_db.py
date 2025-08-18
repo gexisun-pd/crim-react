@@ -28,10 +28,46 @@ def init_database():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    # Read and execute schema (this will create tables if they don't exist)
+    # First, add is_entry column to existing notes table if not exists
+    if db_exists:
+        try:
+            cursor.execute("ALTER TABLE notes ADD COLUMN is_entry BOOLEAN DEFAULT 0")
+            print("Added is_entry column to notes table")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" in str(e):
+                print("is_entry column already exists in notes table")
+            else:
+                print(f"Warning: Could not add is_entry column: {e}")
+    
+    # Read schema and execute (this will handle creation of tables and indexes)
     with open(schema_path, 'r') as f:
         schema = f.read()
-        cursor.executescript(schema)
+        try:
+            cursor.executescript(schema)
+        except sqlite3.OperationalError as e:
+            if "no such column: is_entry" in str(e):
+                # Try to create the index separately after ensuring column exists
+                print("Handling is_entry column creation...")
+                # Extract all SQL statements
+                statements = [stmt.strip() for stmt in schema.split(';') if stmt.strip()]
+                for stmt in statements:
+                    try:
+                        if 'idx_notes_is_entry' in stmt and 'is_entry' in stmt:
+                            # Skip this index for now, we'll create it later
+                            continue
+                        cursor.execute(stmt)
+                    except sqlite3.Error as inner_e:
+                        if "no such column: is_entry" not in str(inner_e):
+                            print(f"Warning executing statement: {inner_e}")
+            else:
+                raise e
+    
+    # Create index for is_entry column if not exists
+    try:
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notes_is_entry ON notes(is_entry)")
+        print("Created index for is_entry column")
+    except sqlite3.Error as e:
+        print(f"Warning: Could not create is_entry index: {e}")
     
     # Generate and insert note_sets (only if not exists)
     create_note_sets(cursor)
