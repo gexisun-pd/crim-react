@@ -1,5 +1,7 @@
 import os
 import sys
+import sqlite3
+import traceback
 from typing import List, Dict, Optional
 import pandas as pd
 
@@ -7,6 +9,7 @@ import pandas as pd
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from db.db import PiecesDB
 from crim_cache_manager import cache_manager
+from utils.note_id_updater import NoteIdUpdater
 
 # Import crim_intervals for melodic ngrams extraction
 try:
@@ -258,8 +261,8 @@ def insert_melodic_entries_batch(entries_list: List[Dict]) -> int:
     
     insert_sql = """
     INSERT INTO melodic_entries (
-        piece_id, melodic_ngram_set_id, voice, onset, entry_pattern, entry_length, voice_name, is_thematic, from_rest
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        piece_id, melodic_ngram_set_id, voice, onset, entry_pattern, entry_length, voice_name, is_thematic, from_rest, note_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     
     values_list = []
@@ -273,12 +276,12 @@ def insert_melodic_entries_batch(entries_list: List[Dict]) -> int:
             entry.get('entry_length'),
             entry.get('voice_name'),
             entry.get('is_thematic', False),
-            entry.get('from_rest', True)
+            entry.get('from_rest', True),
+            entry.get('note_id')  # Include note_id field
         )
         values_list.append(values)
     
     try:
-        import sqlite3
         conn = sqlite3.connect(db.db_path)
         cursor = conn.cursor()
         cursor.executemany(insert_sql, values_list)
@@ -288,7 +291,6 @@ def insert_melodic_entries_batch(entries_list: List[Dict]) -> int:
     except Exception as e:
         print(f"Error inserting melodic entries: {e}")
         if 'conn' in locals():
-            conn.rollback()
             conn.close()
         return 0
 
@@ -479,6 +481,17 @@ def ingest_melodic_entries_for_all_pieces():
     stats = cache_manager.get_cache_stats()
     for key, value in stats.items():
         print(f"{key}: {value}")
+    
+    # Update note_id fields for newly inserted melodic entries
+    print(f"\n=== Updating note_id fields ===")
+    try:
+        updater = NoteIdUpdater()
+        # Only update melodic_entries since we just inserted them
+        note_id_results = updater.update_melodic_entries_note_ids()
+        print(f"Successfully updated {note_id_results} melodic entries with note_id references")
+    except Exception as e:
+        print(f"Warning: Failed to update note_id fields: {e}")
+        print("You can run the note_id_updater.py script manually later to update these fields")
 
 if __name__ == "__main__":
     ingest_melodic_entries_for_all_pieces()
