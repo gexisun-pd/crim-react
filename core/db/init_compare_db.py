@@ -2,9 +2,8 @@
 """
 Initialize database tables for the compare phase of the project.
 
-This script creates the note_pairs table and other tables needed for 
-musical analysis comparisons. The note_pairs table contains all possible
-pairs of notes from the notes table for comparison analysis.
+This script creates the melodic_ngram_values table which serves as an 
+inverted index for melodic_ngrams table, organizing note_ids by ngram values.
 """
 
 import sqlite3
@@ -27,20 +26,18 @@ def init_compare_database():
         print("Please run init_db.py first to create the main database")
         return False
     
-    print(f"Initializing compare tables in database: {db_path}")
+    print(f"Initializing melodic_ngram_values table in database: {db_path}")
     
     # Create connection
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     try:
-        # Create compare-phase tables
-        create_note_pairs_table(cursor)
-        create_comparison_results_table(cursor)
-        create_similarity_metrics_table(cursor)
+        # Create melodic_ngram_values table
+        create_melodic_ngram_values_table(cursor)
         
         conn.commit()
-        print("Compare database tables initialized successfully")
+        print("Melodic ngram values table initialized successfully")
         return True
         
     except Exception as e:
@@ -50,170 +47,117 @@ def init_compare_database():
     finally:
         conn.close()
 
-def create_note_pairs_table(cursor):
+def create_melodic_ngram_values_table(cursor):
     """
-    Create note_pairs table for storing all combinations of note pairs.
+    Create melodic_ngram_values and related tables as an inverted index for melodic_ngrams.
     
-    This table stores every possible pair of notes from the notes table.
-    Each pair (note_a, note_b) represents a potential comparison, where
-    note_a and note_b can be from the same piece or different pieces.
-    
-    Note: (note_a, note_b) and (note_b, note_a) are considered the same pair,
-    so we only store pairs where note_a_id <= note_b_id to avoid duplicates.
+    melodic_ngram_values: Global aggregation of each unique ngram value across all sets
+    melodic_ngram_value_sets: Detailed breakdown by set for each ngram value
     """
     
     create_table_sql = """
-    CREATE TABLE IF NOT EXISTS note_pairs (
-        note_pair_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        note_a_id INTEGER NOT NULL,
-        note_b_id INTEGER NOT NULL,
+    -- Main table for global ngram value aggregation
+    CREATE TABLE IF NOT EXISTS melodic_ngram_values (
+        value_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ngram_value TEXT NOT NULL UNIQUE,           -- The ngram pattern (e.g., "('-2', '-2', '-2')")
+        ngram_length INTEGER NOT NULL,              -- Length of the ngram (3, 4, 5, etc.)
         
-        -- Composer information
-        composer_a TEXT NOT NULL,
-        composer_b TEXT NOT NULL,
-        same_composer BOOLEAN NOT NULL,
+        -- Global aggregation across all sets
+        total_occurrences INTEGER NOT NULL,         -- Total occurrences across all sets
+        total_sets INTEGER NOT NULL,               -- Number of sets containing this ngram
+        note_ids TEXT NOT NULL,                    -- JSON array of ALL note_ids with this ngram
         
-        -- Piece information
-        piece_a_id INTEGER NOT NULL,
-        piece_b_id INTEGER NOT NULL,
-        same_piece BOOLEAN NOT NULL,
+        -- Global piece and composer statistics
+        piece_ids TEXT NOT NULL,                   -- JSON array of unique piece_ids
+        composers TEXT NOT NULL,                   -- JSON array of unique composers
+        piece_count INTEGER NOT NULL,              -- Number of unique pieces
+        composer_count INTEGER NOT NULL,           -- Number of unique composers
         
-        -- Voice information
-        voice_a INTEGER NOT NULL,
-        voice_b INTEGER NOT NULL,
-        same_voice BOOLEAN NOT NULL,
+        -- Global voice statistics  
+        voice_numbers TEXT NOT NULL,               -- JSON array of voice numbers
+        voice_names TEXT NOT NULL,                 -- JSON array of voice names
+        voice_count INTEGER NOT NULL,              -- Number of unique voices
         
-        -- Timing information
-        onset_a REAL NOT NULL,
-        onset_b REAL NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    -- Detailed breakdown by set for each ngram value
+    CREATE TABLE IF NOT EXISTS melodic_ngram_value_sets (
+        value_set_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        value_id INTEGER NOT NULL,                 -- Reference to melodic_ngram_values
+        melodic_ngram_set_id INTEGER NOT NULL,     -- Reference to melodic_ngram_sets
+        
+        -- Set-specific statistics
+        set_occurrences INTEGER NOT NULL,          -- Occurrences in this specific set
+        set_note_ids TEXT NOT NULL,               -- JSON array of note_ids in this set
+        
+        -- Set-specific piece and composer statistics
+        set_piece_ids TEXT NOT NULL,              -- JSON array of piece_ids in this set
+        set_composers TEXT NOT NULL,              -- JSON array of composers in this set
+        set_piece_count INTEGER NOT NULL,         -- Number of pieces in this set
+        set_composer_count INTEGER NOT NULL,      -- Number of composers in this set
+        
+        -- Set-specific voice statistics
+        set_voice_numbers TEXT NOT NULL,          -- JSON array of voice numbers in this set
+        set_voice_names TEXT NOT NULL,            -- JSON array of voice names in this set
+        set_voice_count INTEGER NOT NULL,         -- Number of voices in this set
         
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         
-        -- Foreign key constraints
-        FOREIGN KEY (note_a_id) REFERENCES notes (note_id) ON DELETE CASCADE,
-        FOREIGN KEY (note_b_id) REFERENCES notes (note_id) ON DELETE CASCADE,
-        FOREIGN KEY (piece_a_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
-        FOREIGN KEY (piece_b_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
+        FOREIGN KEY (value_id) REFERENCES melodic_ngram_values (value_id) ON DELETE CASCADE,
+        FOREIGN KEY (melodic_ngram_set_id) REFERENCES melodic_ngram_sets (set_id) ON DELETE CASCADE,
         
-        -- Ensure no duplicate pairs (note_a_id should be <= note_b_id)
-        CONSTRAINT unique_note_pair UNIQUE (note_a_id, note_b_id),
-        CONSTRAINT ordered_pair CHECK (note_a_id <= note_b_id)
+        -- Ensure unique combination of value_id and set_id
+        UNIQUE(value_id, melodic_ngram_set_id)
     );
     
-    -- Indexes for efficient querying
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_note_a ON note_pairs(note_a_id);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_note_b ON note_pairs(note_b_id);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_composer_a ON note_pairs(composer_a);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_composer_b ON note_pairs(composer_b);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_same_composer ON note_pairs(same_composer);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_piece_a ON note_pairs(piece_a_id);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_piece_b ON note_pairs(piece_b_id);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_same_piece ON note_pairs(same_piece);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_voice_a ON note_pairs(voice_a);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_voice_b ON note_pairs(voice_b);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_same_voice ON note_pairs(same_voice);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_onset_a ON note_pairs(onset_a);
-    CREATE INDEX IF NOT EXISTS idx_note_pairs_onset_b ON note_pairs(onset_b);
+    -- Indexes for melodic_ngram_values
+    CREATE INDEX IF NOT EXISTS idx_melodic_ngram_values_ngram ON melodic_ngram_values(ngram_value);
+    CREATE INDEX IF NOT EXISTS idx_melodic_ngram_values_length ON melodic_ngram_values(ngram_length);
+    CREATE INDEX IF NOT EXISTS idx_melodic_ngram_values_occurrences ON melodic_ngram_values(total_occurrences);
+    CREATE INDEX IF NOT EXISTS idx_melodic_ngram_values_sets ON melodic_ngram_values(total_sets);
+    CREATE INDEX IF NOT EXISTS idx_melodic_ngram_values_piece_count ON melodic_ngram_values(piece_count);
+    CREATE INDEX IF NOT EXISTS idx_melodic_ngram_values_composer_count ON melodic_ngram_values(composer_count);
+    
+    -- Indexes for melodic_ngram_value_sets
+    CREATE INDEX IF NOT EXISTS idx_melodic_ngram_value_sets_value ON melodic_ngram_value_sets(value_id);
+    CREATE INDEX IF NOT EXISTS idx_melodic_ngram_value_sets_set ON melodic_ngram_value_sets(melodic_ngram_set_id);
+    CREATE INDEX IF NOT EXISTS idx_melodic_ngram_value_sets_occurrences ON melodic_ngram_value_sets(set_occurrences);
+    CREATE INDEX IF NOT EXISTS idx_melodic_ngram_value_sets_pieces ON melodic_ngram_value_sets(set_piece_count);
     """
     
     cursor.executescript(create_table_sql)
     
     # Check if data already exists
-    cursor.execute('SELECT COUNT(*) FROM note_pairs')
-    existing_count = cursor.fetchone()[0]
+    cursor.execute('SELECT COUNT(*) FROM melodic_ngram_values')
+    existing_values = cursor.fetchone()[0]
     
-    if existing_count > 0:
-        print(f"Note pairs table already contains {existing_count:,} pairs")
+    cursor.execute('SELECT COUNT(*) FROM melodic_ngram_value_sets')
+    existing_sets = cursor.fetchone()[0]
+    
+    if existing_values > 0 or existing_sets > 0:
+        print(f"Tables already contain data: {existing_values:,} values, {existing_sets:,} value-set pairs")
     else:
-        print("Note pairs table created (empty)")
-
-def create_comparison_results_table(cursor):
-    """Create table to store comparison results between note pairs"""
-    
-    create_table_sql = """
-    CREATE TABLE IF NOT EXISTS comparison_results (
-        comparison_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        note_pair_id INTEGER NOT NULL,
-        
-        -- Comparison metadata
-        comparison_type TEXT NOT NULL,  -- 'melodic_interval', 'harmonic', 'rhythmic', etc.
-        comparison_method TEXT NOT NULL,  -- Algorithm/method used
-        
-        -- Results
-        similarity_score REAL,  -- 0.0 to 1.0, higher = more similar
-        distance_score REAL,    -- Distance metric, lower = more similar
-        is_match BOOLEAN,       -- Boolean result for exact matches
-        confidence REAL,        -- Confidence in the result (0.0 to 1.0)
-        
-        -- Additional analysis data (JSON format)
-        analysis_data TEXT,     -- JSON string with detailed analysis
-        
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        
-        FOREIGN KEY (note_pair_id) REFERENCES note_pairs (note_pair_id) ON DELETE CASCADE,
-        
-        -- Ensure unique comparison per pair and method
-        UNIQUE(note_pair_id, comparison_type, comparison_method)
-    );
-    
-    CREATE INDEX IF NOT EXISTS idx_comparison_results_pair ON comparison_results(note_pair_id);
-    CREATE INDEX IF NOT EXISTS idx_comparison_results_type ON comparison_results(comparison_type);
-    CREATE INDEX IF NOT EXISTS idx_comparison_results_method ON comparison_results(comparison_method);
-    CREATE INDEX IF NOT EXISTS idx_comparison_results_similarity ON comparison_results(similarity_score);
-    CREATE INDEX IF NOT EXISTS idx_comparison_results_match ON comparison_results(is_match);
-    """
-    
-    cursor.executescript(create_table_sql)
-    print("Comparison results table created")
-
-def create_similarity_metrics_table(cursor):
-    """Create table to store various similarity metrics and thresholds"""
-    
-    create_table_sql = """
-    CREATE TABLE IF NOT EXISTS similarity_metrics (
-        metric_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        metric_name TEXT NOT NULL UNIQUE,
-        metric_type TEXT NOT NULL,  -- 'distance', 'similarity', 'boolean'
-        description TEXT,
-        
-        -- Threshold values for classification
-        exact_match_threshold REAL,     -- Threshold for exact matches
-        high_similarity_threshold REAL, -- Threshold for high similarity
-        moderate_similarity_threshold REAL, -- Threshold for moderate similarity
-        
-        -- Metric properties
-        min_value REAL,  -- Minimum possible value
-        max_value REAL,  -- Maximum possible value
-        higher_is_better BOOLEAN,  -- True if higher values mean more similar
-        
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    
-    CREATE INDEX IF NOT EXISTS idx_similarity_metrics_name ON similarity_metrics(metric_name);
-    CREATE INDEX IF NOT EXISTS idx_similarity_metrics_type ON similarity_metrics(metric_type);
-    """
-    
-    cursor.executescript(create_table_sql)
-    print("Similarity metrics table created")
+        print("Melodic ngram values tables created (empty)")
 
 def main():
-    parser = argparse.ArgumentParser(description='Initialize compare database tables')
+    parser = argparse.ArgumentParser(description='Initialize melodic_ngram_values table')
     
     args = parser.parse_args()
     
-    print("=== Compare Database Initialization ===")
+    print("=== Melodic Ngram Values Table Initialization ===")
     
-    # Initialize tables
+    # Initialize table
     success = init_compare_database()
     
     if success:
-        print("\nCompare database initialization completed!")
+        print("\nMelodic ngram values table initialization completed!")
         print("\nNext steps:")
-        print("1. Run 'python3 core/compare/note_pairs.py' to generate note pairs")
-        print("2. Implement comparison algorithms")
-        print("3. Run comparison analysis")
+        print("1. Run 'python3 core/compare/melodic_ngram_values.py' to populate the table")
+        print("2. Use the table for efficient ngram pattern searches")
     else:
-        print("\nCompare database initialization failed!")
+        print("\nMelodic ngram values table initialization failed!")
 
 if __name__ == "__main__":
     main()
