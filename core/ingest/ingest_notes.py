@@ -1,5 +1,6 @@
 import os
 import sys
+import sqlite3
 from typing import List, Dict, Optional
 import pandas as pd
 
@@ -287,6 +288,85 @@ def parse_note_name(note_name: str) -> tuple:
     
     return midi_pitch, step, octave, alter
 
+def create_optimal_indexes():
+    """Create optimal indexes for note_id lookup performance"""
+    
+    # Get project root directory (two levels up from core/ingest/)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    db_path = os.path.join(project_root, 'database', 'analysis.db')
+    
+    print("Creating optimal indexes for note lookup performance...")
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Enable WAL mode for better performance
+        cursor.execute("PRAGMA journal_mode = WAL")
+        cursor.execute("PRAGMA synchronous = NORMAL")
+        cursor.execute("PRAGMA cache_size = -64000")  # 64MB cache
+        cursor.execute("PRAGMA temp_store = MEMORY")
+        
+        # Critical index: notes table lookup index
+        print("  Creating notes lookup index (piece_id, voice, onset)...")
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_notes_lookup 
+            ON notes(piece_id, voice, onset)
+        """)
+        
+        # Additional helpful indexes for notes table
+        print("  Creating additional notes indexes...")
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_notes_piece_voice 
+            ON notes(piece_id, voice)
+        """)
+        
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_notes_piece_set 
+            ON notes(piece_id, note_set_id)
+        """)
+        
+        # Indexes for analysis tables (for JOIN operations)
+        print("  Creating analysis table indexes...")
+        
+        # melodic_intervals
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_melodic_intervals_lookup 
+            ON melodic_intervals(piece_id, voice, onset)
+        """)
+        
+        # melodic_ngrams
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_lookup 
+            ON melodic_ngrams(piece_id, voice, onset)
+        """)
+        
+        # melodic_entries
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_melodic_entries_lookup 
+            ON melodic_entries(piece_id, voice, onset)
+        """)
+        
+        conn.commit()
+        
+        # Analyze tables to update statistics
+        print("  Analyzing tables to update statistics...")
+        cursor.execute("ANALYZE notes")
+        cursor.execute("ANALYZE melodic_intervals")
+        cursor.execute("ANALYZE melodic_ngrams")
+        cursor.execute("ANALYZE melodic_entries")
+        
+        conn.commit()
+        conn.close()
+        
+        print("  ✓ All optimal indexes created successfully!")
+        
+    except sqlite3.Error as e:
+        print(f"  ✗ Error creating indexes: {e}")
+        if 'conn' in locals():
+            conn.close()
+        raise
+
 def ingest_notes_for_all_pieces():
     """Main function to ingest notes for all pieces in the database using all note sets"""
     
@@ -294,6 +374,14 @@ def ingest_notes_for_all_pieces():
     if not CRIM_INTERVALS_AVAILABLE:
         print("Cannot proceed without crim_intervals library.")
         return
+    
+    # Create optimal indexes first for better performance
+    print("Setting up optimal database indexes...")
+    try:
+        create_optimal_indexes()
+    except Exception as e:
+        print(f"Warning: Could not create optimal indexes: {e}")
+        print("Proceeding anyway, but performance may be slower.")
     
     # Initialize database connection
     db = PiecesDB()

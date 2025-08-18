@@ -408,6 +408,388 @@ class NoteIdUpdater:
         
         return results
     
+    def ensure_optimal_indexes(self):
+        """
+        Create optimal indexes for note_id lookup performance.
+        This is the most critical optimization.
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            print("=== Creating Optimal Indexes for Note ID Lookup ===")
+            
+            # 1) Critical: Composite index on notes table for JOIN performance
+            print("Creating composite index on notes(piece_id, voice, onset)...")
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_notes_lookup 
+                ON notes(piece_id, voice, onset)
+            """)
+            
+            # 2) Additional useful indexes for notes table
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_notes_piece_voice 
+                ON notes(piece_id, voice)
+            """)
+            
+            # 3) Ensure analysis tables have indexes for JOIN operations
+            analysis_tables = ['melodic_intervals', 'melodic_ngrams', 'melodic_entries']
+            
+            for table in analysis_tables:
+                # Check if table exists first
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+                if cursor.fetchone():
+                    print(f"Creating lookup index on {table}(piece_id, voice, onset)...")
+                    cursor.execute(f"""
+                        CREATE INDEX IF NOT EXISTS idx_{table}_lookup 
+                        ON {table}(piece_id, voice, onset)
+                    """)
+            
+            conn.commit()
+            conn.close()
+            
+            print("✓ Optimal indexes created successfully")
+            
+        except sqlite3.Error as e:
+            print(f"Error creating indexes: {e}")
+            if 'conn' in locals():
+                conn.close()
+            raise
+        """
+        Add note_id columns to existing tables if they don't exist.
+        This is useful for migrating existing databases.
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Check and add note_id column to melodic_intervals
+            cursor.execute("PRAGMA table_info(melodic_intervals)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'note_id' not in columns:
+                print("Adding note_id column to melodic_intervals table...")
+                cursor.execute("""
+                    ALTER TABLE melodic_intervals 
+                    ADD COLUMN note_id INTEGER REFERENCES notes(note_id) ON DELETE CASCADE
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_melodic_intervals_note 
+                    ON melodic_intervals(note_id)
+                """)
+            
+            # Check and add note_id column to melodic_ngrams
+            cursor.execute("PRAGMA table_info(melodic_ngrams)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'note_id' not in columns:
+                print("Adding note_id column to melodic_ngrams table...")
+                cursor.execute("""
+                    ALTER TABLE melodic_ngrams 
+                    ADD COLUMN note_id INTEGER REFERENCES notes(note_id) ON DELETE CASCADE
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_note 
+                    ON melodic_ngrams(note_id)
+                """)
+            
+            # Check and add note_id column to melodic_entries
+            cursor.execute("PRAGMA table_info(melodic_entries)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'note_id' not in columns:
+                print("Adding note_id column to melodic_entries table...")
+                cursor.execute("""
+                    ALTER TABLE melodic_entries 
+                    ADD COLUMN note_id INTEGER REFERENCES notes(note_id) ON DELETE CASCADE
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_melodic_entries_note 
+                    ON melodic_entries(note_id)
+                """)
+            
+            conn.commit()
+            conn.close()
+            print("Successfully added note_id columns to existing tables")
+            
+        except sqlite3.Error as e:
+            print(f"Database error adding note_id columns: {e}")
+            if 'conn' in locals():
+                conn.close()
+            raise
+    
+    def update_note_ids_batch_optimized(self, table_name: str, piece_id: Optional[int] = None,
+                                      tolerance: float = 0.001, batch_size: int = 10000) -> int:
+        """
+        Optimized batch update using JOIN instead of row-by-row subqueries.
+        This is much faster for large datasets.
+        
+        Args:
+            table_name: Name of the table to update ('melodic_intervals', 'melodic_ngrams', 'melodic_entries')
+            piece_id: If provided, only update records for this piece
+            tolerance: Tolerance for onset matching
+            batch_size: Process records in batches of this size for progress tracking
+            
+        Returns:
+            Number of records updated
+        """
+        if table_name not in ['melodic_intervals', 'melodic_ngrams', 'melodic_entries']:
+            raise ValueError(f"Invalid table name: {table_name}")
+        
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL") 
+            conn.execute("PRAGMA cache_size=10000")
+            cursor = conn.cursor()
+            
+            # Get the primary key column name for the table
+            pk_map = {
+                'melodic_intervals': 'interval_id',
+                'melodic_ngrams': 'ngram_id', 
+                'melodic_entries': 'entry_id'
+            }
+            pk_column = pk_map[table_name]
+            
+            print(f"=== Optimized Batch Update for {table_name} ===")
+            
+            # First, ensure optimal indexes exist
+            self.ensure_optimal_indexes()
+            
+            # Count records that need updating
+            where_clause = "WHERE note_id IS NULL"
+            params = []
+            if piece_id is not None:
+                where_clause += " AND piece_id = ?"
+                params.append(piece_id)
+            
+            cursor.execute(f"SELECT COUNT(*) FROM {table_name} {where_clause}", params)
+            total_count = cursor.fetchone()[0]
+            
+            if total_count == 0:
+                print(f"No records in {table_name} need note_id updates")
+                conn.close()
+                return 0
+            
+            print(f"Found {total_count} records to update in {table_name}")
+            
+            # For very large datasets, offer batch processing
+            if total_count > batch_size and batch_size > 0:
+                return self._update_in_batches(cursor, table_name, pk_column, piece_id, tolerance, total_count, batch_size)
+            else:
+                return self._update_all_at_once(cursor, table_name, pk_column, piece_id, tolerance, total_count)
+                
+        except sqlite3.Error as e:
+            print(f"Database error in batch update: {e}")
+            if 'conn' in locals():
+                conn.rollback()
+                conn.close()
+            return 0
+    
+    def _update_all_at_once(self, cursor, table_name: str, pk_column: str, 
+                           piece_id: Optional[int], tolerance: float, total_count: int) -> int:
+        """Update all records at once using temporary table approach."""
+        
+        # Method 1: Using temporary table approach for better compatibility
+        print("Creating temporary mapping table...")
+        
+        # Show progress for large datasets
+        if total_count > 1000:
+            print(f"  Processing {total_count} records (this may take a while)...")
+        
+        # Create a temporary table with the mapping
+        cursor.execute("""
+            DROP TABLE IF EXISTS temp_note_mapping
+        """)
+        
+        print("  Building note_id mapping...")
+        
+        # Build the query and parameters correctly
+        temp_query = f"""
+            CREATE TEMP TABLE temp_note_mapping AS
+            SELECT 
+                t.{pk_column} as target_id,
+                n.note_id as matched_note_id
+            FROM {table_name} t
+            LEFT JOIN notes n ON (
+                n.piece_id = t.piece_id 
+                AND n.voice = t.voice 
+                AND ABS(n.onset - t.onset) <= ?
+            )
+            WHERE t.note_id IS NULL
+        """
+        
+        if piece_id is not None:
+            temp_query += " AND t.piece_id = ?"
+            temp_params = [tolerance, piece_id]
+        else:
+            temp_params = [tolerance]
+        
+        cursor.execute(temp_query, temp_params)
+        print("  Mapping table created successfully")
+        
+        # Count successful mappings
+        cursor.execute("SELECT COUNT(*) FROM temp_note_mapping WHERE matched_note_id IS NOT NULL")
+        mapped_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM temp_note_mapping WHERE matched_note_id IS NULL")
+        unmapped_count = cursor.fetchone()[0]
+        
+        print(f"  Found matches for {mapped_count}/{total_count} records")
+        if unmapped_count > 0:
+            print(f"  Warning: {unmapped_count} records could not be matched")
+        
+        # Update using the mapping table with progress monitoring
+        print("  Applying updates...")
+        
+        # For large datasets, we can't easily show real-time progress during UPDATE,
+        # but we can estimate timing
+        import time
+        start_time = time.time()
+        
+        # Enable progress monitoring in SQLite if possible
+        if total_count > 10000:
+            print(f"  Updating {mapped_count} records (this may take several minutes)...")
+            print("  Please wait - SQLite is processing the batch update...")
+        
+        cursor.execute(f"""
+            UPDATE {table_name}
+            SET note_id = (
+                SELECT matched_note_id 
+                FROM temp_note_mapping 
+                WHERE target_id = {table_name}.{pk_column}
+            )
+            WHERE {pk_column} IN (
+                SELECT target_id 
+                FROM temp_note_mapping 
+                WHERE matched_note_id IS NOT NULL
+            )
+        """)
+        
+        direct_updated = cursor.rowcount
+        elapsed = time.time() - start_time
+        
+        if elapsed > 1:  # Only show timing for operations that took more than 1 second
+            print(f"  Database update completed in {elapsed:.1f} seconds: {direct_updated} records updated")
+        else:
+            print(f"  Database update completed: {direct_updated} records updated")
+        
+        print(f"Direct JOIN update completed: {direct_updated} records updated")
+        
+        # Check for remaining unmatched records
+        print("  Verifying update results...")
+        remaining_query = f"SELECT COUNT(*) FROM {table_name} WHERE note_id IS NULL"
+        remaining_params = []
+        
+        if piece_id is not None:
+            remaining_query += " AND piece_id = ?"
+            remaining_params.append(piece_id)
+        
+        cursor.execute(remaining_query, remaining_params)
+        remaining = cursor.fetchone()[0]
+        
+        if remaining > 0:
+            print(f"Warning: {remaining} records still have NULL note_id")
+            
+            # Show a few examples of unmatched records for debugging
+            example_query = f"""
+                SELECT {pk_column}, piece_id, voice, onset 
+                FROM {table_name} 
+                WHERE note_id IS NULL 
+                {' AND piece_id = ?' if piece_id is not None else ''}
+                LIMIT 3
+            """
+            cursor.execute(example_query, remaining_params)
+            examples = cursor.fetchall()
+            
+            print("  Examples of unmatched records:")
+            for example in examples:
+                print(f"    {pk_column}={example[0]}, piece_id={example[1]}, voice={example[2]}, onset={example[3]}")
+        
+        # Calculate success rate
+        success_rate = (direct_updated / total_count * 100) if total_count > 0 else 0
+        print(f"✓ Batch update completed: {direct_updated}/{total_count} records ({success_rate:.1f}% success)")
+        
+        # Clean up
+        cursor.execute("DROP TABLE IF EXISTS temp_note_mapping")
+        
+        cursor.connection.commit()
+        cursor.connection.close()
+        
+        return direct_updated
+    
+    def _update_in_batches(self, cursor, table_name: str, pk_column: str,
+                          piece_id: Optional[int], tolerance: float, 
+                          total_count: int, batch_size: int) -> int:
+        """Update records in smaller batches for better progress tracking."""
+        
+        print(f"Using batch processing: {batch_size} records per batch")
+        
+        # Get all record IDs that need updating
+        where_clause = "WHERE note_id IS NULL"
+        params = []
+        if piece_id is not None:
+            where_clause += " AND piece_id = ?"
+            params.append(piece_id)
+        
+        cursor.execute(f"SELECT {pk_column} FROM {table_name} {where_clause} ORDER BY {pk_column}", params)
+        all_ids = [row[0] for row in cursor.fetchall()]
+        
+        total_updated = 0
+        
+        # Process in batches
+        for i in range(0, len(all_ids), batch_size):
+            batch_ids = all_ids[i:i + batch_size]
+            batch_num = (i // batch_size) + 1
+            total_batches = (len(all_ids) + batch_size - 1) // batch_size
+            
+            print(f"  Processing batch {batch_num}/{total_batches} ({len(batch_ids)} records)...")
+            
+            # Create placeholders for the IN clause
+            placeholders = ','.join(['?' for _ in batch_ids])
+            
+            # Use simpler approach: create temporary table for this batch too
+            cursor.execute("DROP TABLE IF EXISTS temp_batch_mapping")
+            
+            cursor.execute(f"""
+                CREATE TEMP TABLE temp_batch_mapping AS
+                SELECT 
+                    t.{pk_column} as target_id,
+                    n.note_id as matched_note_id
+                FROM {table_name} t
+                LEFT JOIN notes n ON (
+                    n.piece_id = t.piece_id 
+                    AND n.voice = t.voice 
+                    AND ABS(n.onset - t.onset) <= ?
+                )
+                WHERE t.{pk_column} IN ({placeholders})
+            """, [tolerance] + batch_ids)
+            
+            # Update this batch using the temporary mapping
+            cursor.execute(f"""
+                UPDATE {table_name}
+                SET note_id = (
+                    SELECT matched_note_id 
+                    FROM temp_batch_mapping 
+                    WHERE target_id = {table_name}.{pk_column}
+                )
+                WHERE {pk_column} IN (
+                    SELECT target_id 
+                    FROM temp_batch_mapping 
+                    WHERE matched_note_id IS NOT NULL
+                )
+            """)
+            
+            batch_updated = cursor.rowcount
+            total_updated += batch_updated
+            
+            progress = (i + len(batch_ids)) / len(all_ids) * 100
+            print(f"    Batch {batch_num} completed: {batch_updated}/{len(batch_ids)} updated ({progress:.1f}% overall)")
+            
+            # Clean up batch table
+            cursor.execute("DROP TABLE IF EXISTS temp_batch_mapping")
+        
+        cursor.connection.commit()
+        cursor.connection.close()
+        
+        return total_updated
+
     def add_note_id_columns_to_existing_tables(self):
         """
         Add note_id columns to existing tables if they don't exist.
@@ -729,10 +1111,18 @@ def main():
                        help='Run functionality tests')
     parser.add_argument('--create-test-data', action='store_true',
                        help='Create minimal test data during testing')
+    parser.add_argument('--optimize', action='store_true',
+                       help='Use optimized batch update method (much faster)')
+    parser.add_argument('--create-indexes', action='store_true',
+                       help='Create optimal indexes before updating')
     
     args = parser.parse_args()
     
     updater = NoteIdUpdater()
+    
+    # Create indexes if requested
+    if args.create_indexes:
+        updater.ensure_optimal_indexes()
     
     # Run tests if requested
     if args.test:
@@ -770,15 +1160,32 @@ def main():
     if args.add_columns:
         updater.add_note_id_columns_to_existing_tables()
     
-    # Update note_ids
-    if args.table == 'all':
-        updater.update_all_note_ids(args.piece_id, args.tolerance)
-    elif args.table == 'melodic_intervals':
-        updater.update_melodic_intervals_note_ids(args.piece_id, args.tolerance)
-    elif args.table == 'melodic_ngrams':
-        updater.update_melodic_ngrams_note_ids(args.piece_id, args.tolerance)
-    elif args.table == 'melodic_entries':
-        updater.update_melodic_entries_note_ids(args.piece_id, args.tolerance)
+    # Update note_ids - use optimized method if requested
+    if args.optimize:
+        print("Using optimized batch update method...")
+        if args.table == 'all':
+            results = {}
+            for table in ['melodic_intervals', 'melodic_ngrams', 'melodic_entries']:
+                print(f"\n--- Optimized update for {table} ---")
+                results[table] = updater.update_note_ids_batch_optimized(table, args.piece_id, args.tolerance)
+            
+            total_updated = sum(results.values())
+            print(f"\n=== Optimized Update Summary ===")
+            for table, count in results.items():
+                print(f"{table}: {count} records updated")
+            print(f"Total: {total_updated} records updated")
+        else:
+            updater.update_note_ids_batch_optimized(args.table, args.piece_id, args.tolerance)
+    else:
+        # Use original method
+        if args.table == 'all':
+            updater.update_all_note_ids(args.piece_id, args.tolerance)
+        elif args.table == 'melodic_intervals':
+            updater.update_melodic_intervals_note_ids(args.piece_id, args.tolerance)
+        elif args.table == 'melodic_ngrams':
+            updater.update_melodic_ngrams_note_ids(args.piece_id, args.tolerance)
+        elif args.table == 'melodic_entries':
+            updater.update_melodic_entries_note_ids(args.piece_id, args.tolerance)
 
 
 def run_tests():
