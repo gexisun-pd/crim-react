@@ -177,42 +177,7 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
             
             console.log(`Note clicked: SVG index ${noteIndex}`);
             
-            // 先尝试使用准确的映射
-            const mappedNote = svgMapping[noteIndex.toString()];
-            
-            if (mappedNote) {
-              console.log('Found mapped note:', mappedNote);
-              
-              // 获取详细的数据库信息
-              const response = await fetch(`http://localhost:5000/api/notes/${mappedNote.note_id}/details`);
-              if (response.ok) {
-                const data = await response.json();
-                if (data.success && onNoteClick) {
-                  // 添加music21映射信息到响应中
-                  const enrichedData = {
-                    ...data.data,
-                    music21_onset: mappedNote.onset,
-                    music21_pitch_name: mappedNote.pitch_name,
-                    music21_voice_id: mappedNote.voice_id,
-                    music21_duration: mappedNote.duration,
-                    music21_measure: mappedNote.measure,
-                    music21_beat: mappedNote.beat,
-                    svg_index: noteIndex,
-                    match_distance: mappedNote.match_distance
-                  };
-                  
-                  // 高亮点击的音符
-                  highlightNote(noteElement);
-                  
-                  onNoteClick(enrichedData);
-                  return;
-                }
-              }
-            }
-            
-            console.log('No mapping found, using music21 analysis API...');
-            
-            // 备选方案：使用实时music21分析
+            // 使用music21分析获取中间层的onset信息
             if (piece) {
               const response = await fetch(`http://localhost:5000/api/pieces/${piece.id}/analyze-with-music21`, {
                 method: 'POST',
@@ -224,30 +189,166 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
               
               if (response.ok) {
                 const data = await response.json();
-                if (data.success && onNoteClick) {
-                  // 高亮点击的音符
-                  highlightNote(noteElement);
-                  onNoteClick(data.data);
-                  return;
+                if (data.success) {
+                  const music21Data = data.data;
+                  console.log('Music21 analysis result:', music21Data);
+                  
+                  // 现在使用中间层给出的onset在数据库中的两个note_sets中精确匹配
+                  const onset = music21Data.onset;
+                  const voice = music21Data.voice_id;
+                  
+                  console.log(`Searching database for exact match: onset=${onset}, voice=${voice}`);
+                  
+                  try {
+                    // 搜索note_set_id = 1
+                    const set1Response = await fetch(`http://localhost:5000/api/pieces/${piece.id}/notes/find-exact`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({ 
+                        onset: onset,
+                        voice: voice,
+                        note_set_id: 1
+                      })
+                    });
+                    
+                    // 搜索note_set_id = 2  
+                    const set2Response = await fetch(`http://localhost:5000/api/pieces/${piece.id}/notes/find-exact`, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({ 
+                        onset: onset,
+                        voice: voice,
+                        note_set_id: 2
+                      })
+                    });
+                    
+                    let set1Match = null;
+                    let set2Match = null;
+                    
+                    // 处理set1响应
+                    if (set1Response.ok) {
+                      const set1Data = await set1Response.json();
+                      if (set1Data.success && set1Data.note && set1Data.note.onset === onset) {
+                        set1Match = set1Data.note;
+                        console.log('Found exact match in set 1:', set1Match);
+                      } else {
+                        console.log('No exact match in set 1');
+                      }
+                    } else {
+                      console.log('Error querying set 1');
+                    }
+                    
+                    // 处理set2响应
+                    if (set2Response.ok) {
+                      const set2Data = await set2Response.json();
+                      if (set2Data.success && set2Data.note && set2Data.note.onset === onset) {
+                        set2Match = set2Data.note;
+                        console.log('Found exact match in set 2:', set2Match);
+                      } else {
+                        console.log('No exact match in set 2');
+                      }
+                    } else {
+                      console.log('Error querying set 2');
+                    }
+                    
+                    // 构建完整的响应数据
+                    const enrichedData = {
+                      // 中间层music21的信息
+                      music21_analysis: music21Data,
+                      svg_index: noteIndex,
+                      
+                      // 数据库精确匹配的结果
+                      database_matches: {
+                        note_set_1: set1Match,
+                        note_set_2: set2Match
+                      },
+                      
+                      // 搜索参数
+                      search_criteria: {
+                        onset: onset,
+                        voice: voice,
+                        exact_match_required: true
+                      }
+                    };
+                    
+                    // 高亮点击的音符
+                    highlightNote(noteElement);
+                    
+                    console.log('Final enriched data:', enrichedData);
+                    onNoteClick(enrichedData);
+                    return;
+                    
+                  } catch (dbError) {
+                    console.error('Error searching database:', dbError);
+                    
+                    // 如果数据库搜索失败，仍然显示music21的分析结果
+                    const fallbackData = {
+                      music21_analysis: music21Data,
+                      svg_index: noteIndex,
+                      database_matches: {
+                        note_set_1: null,
+                        note_set_2: null
+                      },
+                      search_criteria: {
+                        onset: onset,
+                        voice: voice,
+                        exact_match_required: true
+                      },
+                      error: 'Failed to search database for exact matches'
+                    };
+                    
+                    highlightNote(noteElement);
+                    onNoteClick(fallbackData);
+                    return;
+                  }
                 }
               }
             }
             
-            // 最后的备选方案：显示基本信息
-            console.warn('All mapping methods failed');
+            // 如果music21分析失败，显示基本信息
+            console.warn('Music21 analysis failed');
+            
+            // Get noteIndex for fallback reporting
+            const fallbackAllNotes = Array.from(svgElement.querySelectorAll('.note'));
+            const fallbackNoteIndex = fallbackAllNotes.indexOf(noteElement);
+            
             onNoteClick({
-              message: 'Note clicked but could not retrieve database information',
+              message: 'Note clicked but could not analyze with music21',
               svg_element_id: noteElement.getAttribute('id'),
               svg_element_class: noteElement.getAttribute('class'),
-              svg_index: noteIndex
+              svg_index: fallbackNoteIndex,
+              music21_analysis: null,
+              database_matches: {
+                note_set_1: null,
+                note_set_2: null
+              }
             });
           }
           
         } catch (error) {
           console.error('Error handling note click:', error);
+          
+          // Get noteIndex for error reporting
+          const svgElement = containerRef.current?.querySelector('svg');
+          let errorNoteIndex = -1;
+          if (svgElement) {
+            const errorAllNotes = Array.from(svgElement.querySelectorAll('.note'));
+            errorNoteIndex = errorAllNotes.indexOf(noteElement);
+          }
+          
           onNoteClick({
             message: 'Error processing note click',
-            error: error instanceof Error ? error.message : 'Unknown error'
+            error: error instanceof Error ? error.message : 'Unknown error',
+            svg_index: errorNoteIndex,
+            music21_analysis: null,
+            database_matches: {
+              note_set_1: null,
+              note_set_2: null
+            }
           });
         }
       }

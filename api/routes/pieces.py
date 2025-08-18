@@ -354,6 +354,96 @@ def get_svg_note_mapping(piece_id):
             'error': str(e)
         }), 500
 
+@pieces_bp.route('/pieces/<int:piece_id>/notes/find-exact', methods=['POST'])
+def find_exact_note_match(piece_id):
+    """Find exact note match in database for given onset, voice, and note_set_id"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'JSON data required'
+            }), 400
+        
+        onset = data.get('onset')
+        voice = data.get('voice')
+        note_set_id = data.get('note_set_id', 1)
+        
+        if onset is None or voice is None:
+            return jsonify({
+                'success': False,
+                'error': 'onset and voice are required'
+            }), 400
+        
+        db = PiecesDB()
+        
+        # Verify piece exists
+        piece = db.get_piece_by_id(piece_id)
+        if not piece:
+            return jsonify({
+                'success': False,
+                'error': 'Piece not found'
+            }), 404
+        
+        # Search for exact match using direct SQL query
+        import sqlite3
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        db_path = os.path.join(project_root, 'database', 'analysis.db')
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Query for exact match
+        cursor.execute("""
+            SELECT note_id, piece_id, note_set_id, voice, voice_name, onset, duration, 
+                   offset, measure, beat, pitch, name, step, octave, `alter`, type, staff, tie
+            FROM notes 
+            WHERE piece_id = ? AND note_set_id = ? AND voice = ? AND onset = ?
+        """, (piece_id, note_set_id, voice, onset))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            # Convert row to dictionary
+            columns = ['note_id', 'piece_id', 'note_set_id', 'voice', 'voice_name', 
+                      'onset', 'duration', 'offset', 'measure', 'beat', 'pitch', 
+                      'name', 'step', 'octave', 'alter', 'type', 'staff', 'tie']
+            note = dict(zip(columns, row))
+            
+            return jsonify({
+                'success': True,
+                'note': note,
+                'search_criteria': {
+                    'piece_id': piece_id,
+                    'note_set_id': note_set_id,
+                    'voice': voice,
+                    'onset': onset,
+                    'exact_match': True
+                }
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'note': None,
+                'message': f'No exact match found for piece_id={piece_id}, note_set_id={note_set_id}, voice={voice}, onset={onset}',
+                'search_criteria': {
+                    'piece_id': piece_id,
+                    'note_set_id': note_set_id,
+                    'voice': voice,
+                    'onset': onset,
+                    'exact_match': True
+                }
+            })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @pieces_bp.route('/pieces/<int:piece_id>/analyze-with-music21', methods=['POST'])
 def analyze_piece_with_music21(piece_id):
     """Analyze piece with music21 and return note at specific SVG position"""

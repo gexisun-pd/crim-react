@@ -45,61 +45,159 @@ const HomePage: React.FC = () => {
         {/* Selected Note Details */}
         {selectedNoteDetails && (
           <div className="bg-card rounded-lg p-6 border">
-            <h3 className="text-lg font-semibold mb-4">Selected Note Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Note ID</label>
-                <p className="text-lg font-mono">{selectedNoteDetails.id || selectedNoteDetails.note_id}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Pitch</label>
-                <p className="text-lg">{selectedNoteDetails.pitch_name || selectedNoteDetails.name}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Octave</label>
-                <p className="text-lg">{selectedNoteDetails.octave}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Voice</label>
-                <p className="text-lg">{selectedNoteDetails.voice_name}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Database Onset</label>
-                <p className="text-lg">{selectedNoteDetails.onset}</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Duration</label>
-                <p className="text-lg">{selectedNoteDetails.duration}</p>
-              </div>
-              {/* Music21 specific information */}
-              {selectedNoteDetails.music21_onset !== undefined && (
-                <>
+            <h3 className="text-lg font-semibold mb-4">Selected Note Analysis</h3>
+            
+            {/* Music21 Analysis Section */}
+            {selectedNoteDetails.music21_analysis && (
+              <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                <h4 className="text-md font-semibold mb-3 text-blue-800">Music21 中间层分析</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="text-sm font-medium text-muted-foreground">Music21 Onset</label>
-                    <p className="text-lg text-blue-600">{selectedNoteDetails.music21_onset}</p>
+                    <label className="text-sm font-medium text-blue-600">Onset</label>
+                    <p className="text-lg font-mono">{selectedNoteDetails.music21_analysis.onset}</p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-muted-foreground">Measure</label>
-                    <p className="text-lg">{selectedNoteDetails.music21_measure || selectedNoteDetails.measure}</p>
+                    <label className="text-sm font-medium text-blue-600">Voice ID</label>
+                    <p className="text-lg">{selectedNoteDetails.music21_analysis.voice_id}</p>
                   </div>
                   <div>
-                    <label className="text-sm font-medium text-muted-foreground">Beat</label>
-                    <p className="text-lg">{selectedNoteDetails.music21_beat || selectedNoteDetails.beat}</p>
+                    <label className="text-sm font-medium text-blue-600">Pitch Name</label>
+                    <p className="text-lg">{selectedNoteDetails.music21_analysis.pitch_name}</p>
                   </div>
-                </>
-              )}
-              {selectedNoteDetails.match_distance !== undefined && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Match Quality</label>
-                  <p className="text-lg text-green-600">Distance: {selectedNoteDetails.match_distance.toFixed(3)}</p>
+                  <div>
+                    <label className="text-sm font-medium text-blue-600">Duration</label>
+                    <p className="text-lg">{selectedNoteDetails.music21_analysis.duration}</p>
+                  </div>
+                  {selectedNoteDetails.music21_analysis.measure && (
+                    <div>
+                      <label className="text-sm font-medium text-blue-600">Measure</label>
+                      <p className="text-lg">{selectedNoteDetails.music21_analysis.measure}</p>
+                    </div>
+                  )}
+                  {selectedNoteDetails.music21_analysis.beat && (
+                    <div>
+                      <label className="text-sm font-medium text-blue-600">Beat</label>
+                      <p className="text-lg">{selectedNoteDetails.music21_analysis.beat}</p>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+
+            {/* Database Matches Section */}
+            {selectedNoteDetails.database_matches && (
+              <div className="mb-6">
+                <h4 className="text-md font-semibold mb-3">数据库精确匹配结果</h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Note Set 1 */}
+                  <div className="p-4 border rounded-lg">
+                    <h5 className="font-medium mb-2 text-green-700">Note Set 1 (combineUnisons=True)</h5>
+                    {selectedNoteDetails.database_matches.note_set_1 ? (
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Note ID:</span>
+                          <span className="font-mono">{selectedNoteDetails.database_matches.note_set_1.note_id}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Name:</span>
+                          <span>{selectedNoteDetails.database_matches.note_set_1.name}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Onset:</span>
+                          <span className="font-mono">{selectedNoteDetails.database_matches.note_set_1.onset}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Voice:</span>
+                          <span>{selectedNoteDetails.database_matches.note_set_1.voice} ({selectedNoteDetails.database_matches.note_set_1.voice_name})</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Pitch:</span>
+                          <span>{selectedNoteDetails.database_matches.note_set_1.pitch}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Measure:</span>
+                          <span>{selectedNoteDetails.database_matches.note_set_1.measure}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Duration:</span>
+                          <span>{selectedNoteDetails.database_matches.note_set_1.duration}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground italic">未找到精确匹配</p>
+                    )}
+                  </div>
+
+                  {/* Note Set 2 */}
+                  <div className="p-4 border rounded-lg">
+                    <h5 className="font-medium mb-2 text-purple-700">Note Set 2 (combineUnisons=False)</h5>
+                    {selectedNoteDetails.database_matches.note_set_2 ? (
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Note ID:</span>
+                          <span className="font-mono">{selectedNoteDetails.database_matches.note_set_2.note_id}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Name:</span>
+                          <span>{selectedNoteDetails.database_matches.note_set_2.name}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Onset:</span>
+                          <span className="font-mono">{selectedNoteDetails.database_matches.note_set_2.onset}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Voice:</span>
+                          <span>{selectedNoteDetails.database_matches.note_set_2.voice} ({selectedNoteDetails.database_matches.note_set_2.voice_name})</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Pitch:</span>
+                          <span>{selectedNoteDetails.database_matches.note_set_2.pitch}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Measure:</span>
+                          <span>{selectedNoteDetails.database_matches.note_set_2.measure}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-muted-foreground">Duration:</span>
+                          <span>{selectedNoteDetails.database_matches.note_set_2.duration}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground italic">未找到精确匹配</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Search Criteria */}
+            {selectedNoteDetails.search_criteria && (
+              <div className="p-3 bg-gray-50 rounded">
+                <h5 className="text-sm font-medium mb-2">搜索条件</h5>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <span>Onset: <code>{selectedNoteDetails.search_criteria.onset}</code></span>
+                  <span>Voice: <code>{selectedNoteDetails.search_criteria.voice}</code></span>
+                  <span>精确匹配: <code>{selectedNoteDetails.search_criteria.exact_match_required ? 'Yes' : 'No'}</code></span>
+                </div>
+              </div>
+            )}
+
+            {/* SVG Info */}
             {selectedNoteDetails.svg_index !== undefined && (
               <div className="mt-4 p-3 bg-muted rounded">
                 <p className="text-sm text-muted-foreground">
-                  SVG Position: {selectedNoteDetails.svg_index} | 
-                  Music21 Analysis: {selectedNoteDetails.music21_onset ? 'Available' : 'N/A'}
+                  SVG Index: {selectedNoteDetails.svg_index} | 
+                  Status: {selectedNoteDetails.music21_analysis ? '✓ Analyzed' : '✗ Analysis Failed'}
+                </p>
+              </div>
+            )}
+
+            {/* Error Information */}
+            {selectedNoteDetails.error && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded">
+                <p className="text-sm text-red-600">
+                  Error: {selectedNoteDetails.error}
                 </p>
               </div>
             )}
