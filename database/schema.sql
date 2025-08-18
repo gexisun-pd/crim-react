@@ -126,3 +126,31 @@ CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_voice ON melodic_ngrams(voice);
 CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_onset ON melodic_ngrams(onset);
 CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_pattern ON melodic_ngrams(ngram);
 CREATE INDEX IF NOT EXISTS idx_melodic_ngrams_length ON melodic_ngrams(ngram_length);
+
+-- Table: melodic_entries
+CREATE TABLE IF NOT EXISTS melodic_entries (
+	entry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+	piece_id INTEGER NOT NULL,
+	melodic_ngram_set_id INTEGER NOT NULL,  -- Reference to melodic_ngram_sets where ngrams_entry = True
+	voice INTEGER NOT NULL,
+	voice_name TEXT,                        -- Voice name (Cantus, Altus, Tenor, Bassus, etc.)
+	onset REAL NOT NULL,                    -- Entry onset time (start time of first interval)
+	entry_pattern TEXT NOT NULL,            -- The entry pattern (comma-separated intervals)
+	entry_length INTEGER NOT NULL,          -- Length of the entry (3, 4, 5, etc.)
+	is_thematic BOOLEAN NOT NULL DEFAULT 0, -- Whether this entry is thematic (appears multiple times)
+	from_rest BOOLEAN NOT NULL DEFAULT 1,   -- Whether this entry starts after rest/break/fermata
+	
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (piece_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
+	FOREIGN KEY (melodic_ngram_set_id) REFERENCES melodic_ngram_sets (set_id) ON DELETE CASCADE
+);
+
+-- Indexes for melodic_entries table
+CREATE INDEX IF NOT EXISTS idx_melodic_entries_piece ON melodic_entries(piece_id);
+CREATE INDEX IF NOT EXISTS idx_melodic_entries_set ON melodic_entries(melodic_ngram_set_id);
+CREATE INDEX IF NOT EXISTS idx_melodic_entries_voice ON melodic_entries(voice);
+CREATE INDEX IF NOT EXISTS idx_melodic_entries_onset ON melodic_entries(onset);
+CREATE INDEX IF NOT EXISTS idx_melodic_entries_pattern ON melodic_entries(entry_pattern);
+CREATE INDEX IF NOT EXISTS idx_melodic_entries_length ON melodic_entries(entry_length);
+CREATE INDEX IF NOT EXISTS idx_melodic_entries_thematic ON melodic_entries(is_thematic);
+CREATE INDEX IF NOT EXISTS idx_melodic_entries_from_rest ON melodic_entries(from_rest);
