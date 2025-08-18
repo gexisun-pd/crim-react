@@ -53,6 +53,21 @@ class ApiService {
       };
     }
   }
+
+  async getPieceMusicXML(pieceId: number): Promise<string | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/pieces/${pieceId}/musicxml`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return await response.text();
+    } catch (error) {
+      console.error('Failed to fetch MusicXML:', error);
+      return null;
+    }
+  }
 }
 
 export const apiService = new ApiService();

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import PieceSelector from '../components/PieceSelector';
+import ScoreViewer from '../components/ScoreViewer';
 import { Piece } from '../types';
 
 const HomePage: React.FC = () => {
@@ -9,16 +10,22 @@ const HomePage: React.FC = () => {
     setSelectedPiece(piece);
   };
 
+  const handleNoteClick = (noteId: string, element: Element) => {
+    console.log('Note clicked:', noteId, element);
+    // TODO: 在这里添加与数据库交互的逻辑
+    // 例如：获取音符信息、更新状态、显示详情等
+  };
+
   return (
     <div className="min-h-screen bg-background p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold text-foreground">
             Musical Pieces Analysis
           </h1>
           <p className="text-muted-foreground">
-            Select a piece from the database to view its analysis
+            Select a piece from the database to view and interact with the score
           </p>
         </div>
 
@@ -26,6 +33,13 @@ const HomePage: React.FC = () => {
         <div className="bg-card rounded-lg p-6 border">
           <PieceSelector onPieceSelect={handlePieceSelect} />
         </div>
+
+        {/* Score Viewer */}
+        <ScoreViewer 
+          piece={selectedPiece} 
+          onNoteClick={handleNoteClick}
+          className="min-h-[600px]"
+        />
 
         {/* Selected Piece Info */}
         {selectedPiece && (
@@ -56,7 +70,7 @@ const HomePage: React.FC = () => {
 
         {/* Footer */}
         <div className="text-center text-sm text-muted-foreground">
-          <p>Flask + React Application for Musical Analysis</p>
+          <p>Click on any note in the score to interact with the database</p>
         </div>
       </div>
     </div>
