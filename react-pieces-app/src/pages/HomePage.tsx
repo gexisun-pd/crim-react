@@ -49,11 +49,11 @@ const HomePage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Note ID</label>
-                <p className="text-lg font-mono">{selectedNoteDetails.id}</p>
+                <p className="text-lg font-mono">{selectedNoteDetails.id || selectedNoteDetails.note_id}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Pitch</label>
-                <p className="text-lg">{selectedNoteDetails.pitch_name}</p>
+                <p className="text-lg">{selectedNoteDetails.pitch_name || selectedNoteDetails.name}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Octave</label>
@@ -64,14 +64,45 @@ const HomePage: React.FC = () => {
                 <p className="text-lg">{selectedNoteDetails.voice_name}</p>
               </div>
               <div>
-                <label className="text-sm font-medium text-muted-foreground">Onset</label>
+                <label className="text-sm font-medium text-muted-foreground">Database Onset</label>
                 <p className="text-lg">{selectedNoteDetails.onset}</p>
               </div>
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Duration</label>
                 <p className="text-lg">{selectedNoteDetails.duration}</p>
               </div>
+              {/* Music21 specific information */}
+              {selectedNoteDetails.music21_onset !== undefined && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Music21 Onset</label>
+                    <p className="text-lg text-blue-600">{selectedNoteDetails.music21_onset}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Measure</label>
+                    <p className="text-lg">{selectedNoteDetails.music21_measure || selectedNoteDetails.measure}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Beat</label>
+                    <p className="text-lg">{selectedNoteDetails.music21_beat || selectedNoteDetails.beat}</p>
+                  </div>
+                </>
+              )}
+              {selectedNoteDetails.match_distance !== undefined && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Match Quality</label>
+                  <p className="text-lg text-green-600">Distance: {selectedNoteDetails.match_distance.toFixed(3)}</p>
+                </div>
+              )}
             </div>
+            {selectedNoteDetails.svg_index !== undefined && (
+              <div className="mt-4 p-3 bg-muted rounded">
+                <p className="text-sm text-muted-foreground">
+                  SVG Position: {selectedNoteDetails.svg_index} | 
+                  Music21 Analysis: {selectedNoteDetails.music21_onset ? 'Available' : 'N/A'}
+                </p>
+              </div>
+            )}
           </div>
         )}
 

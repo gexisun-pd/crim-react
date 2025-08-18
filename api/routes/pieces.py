@@ -7,6 +7,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'core'))
 
 from db.db import PiecesDB
 
+# Add the api directory to the path for local imports
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from utils.music21_analyzer import Music21Analyzer
+from utils.music21_analyzer import Music21Analyzer
+
 pieces_bp = Blueprint('pieces', __name__)
 
 @pieces_bp.route('/pieces', methods=['GET'])
@@ -205,65 +210,6 @@ def get_piece_musicxml(piece_id):
             'error': str(e)
         }), 500
 
-@pieces_bp.route('/pieces/<int:piece_id>/note-mapping', methods=['GET'])
-def get_piece_note_mapping(piece_id):
-    """Get SVG-to-database note mapping for a piece"""
-    try:
-        db = PiecesDB()
-        piece = db.get_piece_by_id(piece_id)
-        
-        if not piece:
-            return jsonify({
-                'success': False,
-                'error': f'Piece with ID {piece_id} not found'
-            }), 404
-        
-        # Get database notes ordered by onset and voice
-        notes_db = db.get_notes_for_piece(piece_id)
-        
-        if not notes_db:
-            return jsonify({
-                'success': False,
-                'error': f'No notes found for piece {piece_id}'
-            }), 404
-        
-        # Create mapping data structure
-        # This maps SVG note order to database note information
-        mapping_data = []
-        
-        # Filter out rest notes and sort by onset, then by voice
-        note_notes = [note for note in notes_db if note.get('type') == 'Note']
-        note_notes.sort(key=lambda x: (x.get('onset', 0), x.get('voice', 1)))
-        
-        for svg_index, note in enumerate(note_notes):
-            mapping_data.append({
-                'svg_index': svg_index,
-                'note_id': note['note_id'],
-                'piece_id': piece_id,
-                'voice': note.get('voice', 1),
-                'voice_name': note.get('voice_name', ''),
-                'onset': note.get('onset', 0),
-                'measure': note.get('measure', 1),
-                'pitch_name': note.get('name', ''),
-                'octave': note.get('octave'),
-                'duration': note.get('duration', 0)
-            })
-        
-        return jsonify({
-            'success': True,
-            'data': {
-                'piece_id': piece_id,
-                'total_notes': len(mapping_data),
-                'mapping': mapping_data
-            }
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
 @pieces_bp.route('/notes/find-by-position', methods=['POST'])
 def find_note_by_position():
     """Find note_id by piece_id, voice, and onset position"""
@@ -348,6 +294,149 @@ def get_note_details(note_id):
         })
     
     except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@pieces_bp.route('/pieces/<int:piece_id>/svg-mapping', methods=['GET'])
+def get_svg_note_mapping(piece_id):
+    """Get accurate SVG to database note mapping using music21"""
+    try:
+        note_set_id = request.args.get('note_set_id', 1, type=int)
+        
+        db = PiecesDB()
+        
+        # Get piece info
+        piece = db.get_piece_by_id(piece_id)
+        if not piece:
+            return jsonify({
+                'success': False,
+                'error': 'Piece not found'
+            }), 404
+        
+        # Get database notes
+        db_notes = db.get_notes_for_piece(piece_id, note_set_id)
+        
+        # Get file path
+        file_path = piece.get('path')
+        if not os.path.isabs(file_path):
+            base_path = os.path.join(os.path.dirname(__file__), '..', '..', 'data')
+            file_path = os.path.join(base_path, file_path)
+        
+        if not os.path.exists(file_path):
+            return jsonify({
+                'success': False,
+                'error': f'MusicXML file not found: {file_path}'
+            }), 404
+        
+        print(f"Creating SVG mapping for piece {piece_id}, file: {file_path}")
+        
+        # Create accurate mapping using music21
+        mapping = Music21Analyzer.create_svg_to_database_mapping(
+            file_path, piece_id, db_notes
+        )
+        
+        return jsonify({
+            'success': True,
+            'mapping': mapping,
+            'piece_id': piece_id,
+            'note_set_id': note_set_id,
+            'svg_notes_count': len(mapping),
+            'database_notes_count': len(db_notes)
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@pieces_bp.route('/pieces/<int:piece_id>/analyze-with-music21', methods=['POST'])
+def analyze_piece_with_music21(piece_id):
+    """Analyze piece with music21 and return note at specific SVG position"""
+    try:
+        data = request.get_json()
+        svg_index = data.get('svg_index')
+        
+        if svg_index is None:
+            return jsonify({
+                'success': False,
+                'error': 'svg_index is required'
+            }), 400
+        
+        db = PiecesDB()
+        piece = db.get_piece_by_id(piece_id)
+        
+        if not piece:
+            return jsonify({
+                'success': False,
+                'error': 'Piece not found'
+            }), 404
+        
+        # Get file path
+        file_path = piece.get('path')
+        if not os.path.isabs(file_path):
+            base_path = os.path.join(os.path.dirname(__file__), '..', '..', 'data')
+            file_path = os.path.join(base_path, file_path)
+        
+        if not os.path.exists(file_path):
+            return jsonify({
+                'success': False,
+                'error': f'MusicXML file not found: {file_path}'
+            }), 404
+        
+        # Use music21 to get note at specific position
+        target_note = Music21Analyzer.get_note_at_svg_index(file_path, svg_index)
+        
+        if not target_note:
+            return jsonify({
+                'success': False,
+                'error': f'SVG index {svg_index} out of range or invalid'
+            }), 400
+        
+        # Find corresponding note in database using the existing NoteIdUpdater
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'core', 'utils'))
+        from note_id_updater import NoteIdUpdater
+        
+        note_id_updater = NoteIdUpdater()
+        note_id = note_id_updater.find_note_id(
+            piece_id=piece_id,
+            voice=target_note['voice_id'],
+            onset=target_note['onset'],
+            tolerance=0.1  # More generous tolerance
+        )
+        
+        if note_id:
+            # Get full note details
+            note_details = db.get_note_by_id(note_id)
+            if note_details:
+                # Add music21 analysis data
+                note_details.update({
+                    'music21_onset': target_note['onset'],
+                    'music21_duration': target_note['duration'],
+                    'music21_measure': target_note.get('measure'),
+                    'music21_beat': target_note.get('beat'),
+                    'music21_pitch_name': target_note.get('pitch_name'),
+                    'svg_index': svg_index
+                })
+                
+                return jsonify({
+                    'success': True,
+                    'data': note_details
+                })
+        
+        return jsonify({
+            'success': False,
+            'error': f'Could not match SVG note {svg_index} with database',
+            'music21_data': target_note
+        }), 404
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)

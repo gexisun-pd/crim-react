@@ -16,6 +16,24 @@ interface ScoreViewerProps {
   className?: string;
 }
 
+interface SvgMapping {
+  [key: string]: {
+    note_id: number;
+    onset: number;
+    voice_id: number;
+    pitch_name: string;
+    midi_note?: number;
+    octave?: number;
+    measure?: number;
+    beat?: number;
+    duration: number;
+    database_onset: number;
+    database_voice: number;
+    database_name: string;
+    match_distance: number;
+  };
+}
+
 interface VerovioToolkit {
   loadData(data: string): boolean;
   renderToSVG(pageNumber?: number, options?: any): string;
@@ -31,8 +49,10 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [verovio, setVerovio] = useState<VerovioToolkit | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [svgMapping, setSvgMapping] = useState<SvgMapping>({});
+  const [isLoadingMapping, setIsLoadingMapping] = useState(false);
   const [svgContent, setSvgContent] = useState<string>('');
 
   // 初始化 Verovio
@@ -78,7 +98,7 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
     }
 
     const loadScore = async () => {
-      setLoading(true);
+      setIsLoading(true);
       setError(null);
       
       try {
@@ -90,6 +110,27 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
         }
         
         const musicXML = await response.text();
+        
+        // 加载准确的 SVG 映射 using music21
+        setIsLoadingMapping(true);
+        try {
+          const mappingResponse = await fetch(`http://localhost:5000/api/pieces/${piece.id}/svg-mapping?note_set_id=1`);
+          if (mappingResponse.ok) {
+            const mappingData = await mappingResponse.json();
+            if (mappingData.success) {
+              setSvgMapping(mappingData.mapping);
+              console.log(`Loaded accurate mapping for ${Object.keys(mappingData.mapping).length} notes`);
+            } else {
+              console.warn('Failed to load SVG mapping:', mappingData.error);
+            }
+          } else {
+            console.warn('Mapping API unavailable, using fallback method');
+          }
+        } catch (mappingError) {
+          console.warn('Error loading mapping:', mappingError);
+        } finally {
+          setIsLoadingMapping(false);
+        }
         
         // 使用 Verovio 加载 MusicXML
         const success = verovio.loadData(musicXML);
@@ -107,7 +148,7 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
         console.error('Error loading score:', err);
         setError(err instanceof Error ? err.message : 'Unknown error occurred');
       } finally {
-        setLoading(false);
+        setIsLoading(false);
       }
     };
 
@@ -128,55 +169,77 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
         try {
           console.log('Clicked note element:', noteElement);
           
-          // 尝试从 SVG 结构中提取位置信息
-          const notePosition = extractNotePosition(noteElement);
-          
-          if (notePosition && piece) {
-            console.log('Extracted note position:', notePosition);
+          // 获取SVG中所有音符元素来确定索引
+          const svgElement = containerRef.current?.querySelector('svg');
+          if (svgElement) {
+            const allNotes = Array.from(svgElement.querySelectorAll('.note'));
+            const noteIndex = allNotes.indexOf(noteElement);
             
-            // 调用 API 查找对应的 note_id
-            const response = await fetch('http://localhost:5000/api/notes/find-by-position', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                piece_id: piece.id,
-                voice: notePosition.voice,
-                onset: notePosition.onset,
-                tolerance: 2.0  // 大幅增加容错范围以适应估算误差
-              })
-            });
+            console.log(`Note clicked: SVG index ${noteIndex}`);
             
-            const data = await response.json();
+            // 先尝试使用准确的映射
+            const mappedNote = svgMapping[noteIndex.toString()];
             
-            if (data.success && data.data) {
-              console.log('Found note details:', data.data);
+            if (mappedNote) {
+              console.log('Found mapped note:', mappedNote);
               
-              // 高亮点击的音符
-              highlightNote(noteElement);
-              
-              // 调用回调函数传递音符详情
-              onNoteClick(data.data.note_details);
-            } else {
-              console.warn('Could not find note in database:', data.error);
-              
-              // 即使没找到数据库记录，也可以显示一些信息
-              onNoteClick({
-                message: 'Note clicked but not found in database',
-                svg_element_id: noteElement.getAttribute('id'),
-                estimated_position: notePosition,
-                error: data.error
-              });
+              // 获取详细的数据库信息
+              const response = await fetch(`http://localhost:5000/api/notes/${mappedNote.note_id}/details`);
+              if (response.ok) {
+                const data = await response.json();
+                if (data.success && onNoteClick) {
+                  // 添加music21映射信息到响应中
+                  const enrichedData = {
+                    ...data.data,
+                    music21_onset: mappedNote.onset,
+                    music21_pitch_name: mappedNote.pitch_name,
+                    music21_voice_id: mappedNote.voice_id,
+                    music21_duration: mappedNote.duration,
+                    music21_measure: mappedNote.measure,
+                    music21_beat: mappedNote.beat,
+                    svg_index: noteIndex,
+                    match_distance: mappedNote.match_distance
+                  };
+                  
+                  // 高亮点击的音符
+                  highlightNote(noteElement);
+                  
+                  onNoteClick(enrichedData);
+                  return;
+                }
+              }
             }
-          } else {
-            console.warn('Could not extract position from note element');
             
-            // 显示基本信息
+            console.log('No mapping found, using music21 analysis API...');
+            
+            // 备选方案：使用实时music21分析
+            if (piece) {
+              const response = await fetch(`http://localhost:5000/api/pieces/${piece.id}/analyze-with-music21`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ svg_index: noteIndex })
+              });
+              
+              if (response.ok) {
+                const data = await response.json();
+                if (data.success && onNoteClick) {
+                  // 高亮点击的音符
+                  highlightNote(noteElement);
+                  onNoteClick(data.data);
+                  return;
+                }
+              }
+            }
+            
+            // 最后的备选方案：显示基本信息
+            console.warn('All mapping methods failed');
             onNoteClick({
-              message: 'Note clicked - position extraction failed',
+              message: 'Note clicked but could not retrieve database information',
               svg_element_id: noteElement.getAttribute('id'),
-              svg_element_class: noteElement.getAttribute('class')
+              svg_element_class: noteElement.getAttribute('class'),
+              svg_index: noteIndex
             });
           }
           
@@ -290,7 +353,7 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
     (noteElement as HTMLElement).style.fill = '#ff6b6b';
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className={`flex items-center justify-center min-h-[400px] ${className}`}>
         <div className="text-center">
