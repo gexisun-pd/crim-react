@@ -120,7 +120,7 @@ class NoteIdUpdater:
     def update_melodic_intervals_note_ids(self, piece_id: Optional[int] = None,
                                         tolerance: float = 0.001) -> int:
         """
-        Update note_id field in melodic_intervals table.
+        Update note_id field in melodic_intervals table using optimized batch method.
         
         Args:
             piece_id: If provided, only update records for this piece
@@ -129,75 +129,12 @@ class NoteIdUpdater:
         Returns:
             Number of records updated
         """
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Get records that need note_id updates
-            where_clause = "WHERE note_id IS NULL"
-            params = []
-            
-            if piece_id is not None:
-                where_clause += " AND piece_id = ?"
-                params.append(piece_id)
-            
-            cursor.execute(f"""
-                SELECT interval_id, piece_id, voice, onset 
-                FROM melodic_intervals 
-                {where_clause}
-            """, params)
-            
-            records = cursor.fetchall()
-            updated_count = 0
-            
-            print(f"Found {len(records)} melodic_intervals records to update note_id")
-            
-            if len(records) == 0:
-                conn.close()
-                return 0
-            
-            # Show progress for large datasets
-            total_records = len(records)
-            progress_interval = max(1, total_records // 20)  # Show progress every 5%
-            
-            # Update each record
-            for i, (interval_id, pid, voice, onset) in enumerate(records):
-                # Show progress
-                if i % progress_interval == 0 or i == total_records - 1:
-                    progress = (i + 1) / total_records * 100
-                    print(f"  Progress: {i+1}/{total_records} ({progress:.1f}%) - Updated: {updated_count}")
-                
-                note_id = self.find_note_id(pid, voice, onset, tolerance)
-                if note_id:
-                    cursor.execute("""
-                        UPDATE melodic_intervals 
-                        SET note_id = ? 
-                        WHERE interval_id = ?
-                    """, (note_id, interval_id))
-                    updated_count += 1
-                else:
-                    if updated_count < 10:  # Only show first few warnings
-                        print(f"    Warning: No note found for melodic_interval {interval_id} "
-                              f"(piece_id={pid}, voice={voice}, onset={onset})")
-                    elif updated_count == 10:
-                        print(f"    ... (suppressing further warnings)")
-            
-            conn.commit()
-            conn.close()
-            
-            print(f"Updated note_id for {updated_count} melodic_intervals records")
-            return updated_count
-            
-        except sqlite3.Error as e:
-            print(f"Database error updating melodic_intervals note_ids: {e}")
-            if 'conn' in locals():
-                conn.close()
-            return 0
+        return self.update_note_ids_batch_optimized('melodic_intervals', piece_id, tolerance)
     
     def update_melodic_ngrams_note_ids(self, piece_id: Optional[int] = None,
                                      tolerance: float = 0.001) -> int:
         """
-        Update note_id field in melodic_ngrams table.
+        Update note_id field in melodic_ngrams table using optimized batch method.
         
         Args:
             piece_id: If provided, only update records for this piece
@@ -206,75 +143,12 @@ class NoteIdUpdater:
         Returns:
             Number of records updated
         """
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Get records that need note_id updates
-            where_clause = "WHERE note_id IS NULL"
-            params = []
-            
-            if piece_id is not None:
-                where_clause += " AND piece_id = ?"
-                params.append(piece_id)
-            
-            cursor.execute(f"""
-                SELECT ngram_id, piece_id, voice, onset 
-                FROM melodic_ngrams 
-                {where_clause}
-            """, params)
-            
-            records = cursor.fetchall()
-            updated_count = 0
-            
-            print(f"Found {len(records)} melodic_ngrams records to update note_id")
-            
-            if len(records) == 0:
-                conn.close()
-                return 0
-            
-            # Show progress for large datasets
-            total_records = len(records)
-            progress_interval = max(1, total_records // 20)  # Show progress every 5%
-            
-            # Update each record
-            for i, (ngram_id, pid, voice, onset) in enumerate(records):
-                # Show progress
-                if i % progress_interval == 0 or i == total_records - 1:
-                    progress = (i + 1) / total_records * 100
-                    print(f"  Progress: {i+1}/{total_records} ({progress:.1f}%) - Updated: {updated_count}")
-                
-                note_id = self.find_note_id(pid, voice, onset, tolerance)
-                if note_id:
-                    cursor.execute("""
-                        UPDATE melodic_ngrams 
-                        SET note_id = ? 
-                        WHERE ngram_id = ?
-                    """, (note_id, ngram_id))
-                    updated_count += 1
-                else:
-                    if updated_count < 10:  # Only show first few warnings
-                        print(f"    Warning: No note found for melodic_ngram {ngram_id} "
-                              f"(piece_id={pid}, voice={voice}, onset={onset})")
-                    elif updated_count == 10:
-                        print(f"    ... (suppressing further warnings)")
-            
-            conn.commit()
-            conn.close()
-            
-            print(f"Updated note_id for {updated_count} melodic_ngrams records")
-            return updated_count
-            
-        except sqlite3.Error as e:
-            print(f"Database error updating melodic_ngrams note_ids: {e}")
-            if 'conn' in locals():
-                conn.close()
-            return 0
+        return self.update_note_ids_batch_optimized('melodic_ngrams', piece_id, tolerance)
     
     def update_melodic_entries_note_ids(self, piece_id: Optional[int] = None,
                                       tolerance: float = 0.001) -> int:
         """
-        Update note_id field in melodic_entries table.
+        Update note_id field in melodic_entries table using optimized batch method.
         
         Args:
             piece_id: If provided, only update records for this piece
@@ -283,94 +157,7 @@ class NoteIdUpdater:
         Returns:
             Number of records updated
         """
-        try:
-            conn = sqlite3.connect(self.db_path)
-            conn.execute("PRAGMA journal_mode=WAL")  # Enable WAL mode for better concurrency
-            cursor = conn.cursor()
-            
-            # Get records that need note_id updates
-            where_clause = "WHERE note_id IS NULL"
-            params = []
-            
-            if piece_id is not None:
-                where_clause += " AND piece_id = ?"
-                params.append(piece_id)
-            
-            cursor.execute(f"""
-                SELECT entry_id, piece_id, voice, onset 
-                FROM melodic_entries 
-                {where_clause}
-            """, params)
-            
-            records = cursor.fetchall()
-            updated_count = 0
-            failed_count = 0
-            
-            print(f"Found {len(records)} melodic_entries records to update note_id")
-            
-            if len(records) == 0:
-                conn.close()
-                return 0
-            
-            # Show progress for large datasets
-            total_records = len(records)
-            progress_interval = max(1, total_records // 20)  # Show progress every 5%
-            
-            # Process in smaller batches to avoid locking issues
-            batch_size = 100
-            
-            for i in range(0, len(records), batch_size):
-                batch = records[i:i + batch_size]
-                batch_updated = 0
-                
-                # Start a transaction for this batch
-                conn.execute("BEGIN IMMEDIATE")
-                
-                try:
-                    for j, (entry_id, pid, voice, onset) in enumerate(batch):
-                        # Show progress
-                        current_idx = i + j
-                        if current_idx % progress_interval == 0 or current_idx == total_records - 1:
-                            progress = (current_idx + 1) / total_records * 100
-                            print(f"  Progress: {current_idx+1}/{total_records} ({progress:.1f}%) - Updated: {updated_count}, Failed: {failed_count}")
-                        
-                        note_id = self.find_note_id(pid, voice, onset, tolerance, cursor)
-                        if note_id:
-                            cursor.execute("""
-                                UPDATE melodic_entries 
-                                SET note_id = ? 
-                                WHERE entry_id = ?
-                            """, (note_id, entry_id))
-                            batch_updated += 1
-                        else:
-                            failed_count += 1
-                            if failed_count <= 5:  # Only show first few warnings
-                                print(f"    Warning: No note found for melodic_entry {entry_id} "
-                                      f"(piece_id={pid}, voice={voice}, onset={onset})")
-                            elif failed_count == 6:
-                                print(f"    ... (suppressing further warnings)")
-                    
-                    # Commit the batch
-                    conn.commit()
-                    updated_count += batch_updated
-                    
-                except sqlite3.Error as e:
-                    print(f"Error processing batch starting at {i}: {e}")
-                    conn.rollback()
-                    break
-            
-            conn.close()
-            
-            print(f"Updated note_id for {updated_count} melodic_entries records")
-            if failed_count > 0:
-                print(f"Failed to find note_id for {failed_count} records")
-            return updated_count
-            
-        except sqlite3.Error as e:
-            print(f"Database error updating melodic_entries note_ids: {e}")
-            if 'conn' in locals():
-                conn.close()
-            return 0
+        return self.update_note_ids_batch_optimized('melodic_entries', piece_id, tolerance)
     
     def update_all_note_ids(self, piece_id: Optional[int] = None, 
                           tolerance: float = 0.001) -> Dict[str, int]:
@@ -516,16 +303,16 @@ class NoteIdUpdater:
             raise
     
     def update_note_ids_batch_optimized(self, table_name: str, piece_id: Optional[int] = None,
-                                      tolerance: float = 0.001, batch_size: int = 10000) -> int:
+                                      tolerance: float = 0.001, batch_size: int = 5000) -> int:
         """
-        Optimized batch update using JOIN instead of row-by-row subqueries.
-        This is much faster for large datasets.
+        Optimized batch update using JOIN and temporary tables.
+        This is the main method for updating note_id fields efficiently.
         
         Args:
             table_name: Name of the table to update ('melodic_intervals', 'melodic_ngrams', 'melodic_entries')
             piece_id: If provided, only update records for this piece
-            tolerance: Tolerance for onset matching
-            batch_size: Process records in batches of this size for progress tracking
+            tolerance: Tolerance for onset matching (default: 0.001)
+            batch_size: Process records in batches of this size for large datasets (default: 5000)
             
         Returns:
             Number of records updated
@@ -548,9 +335,9 @@ class NoteIdUpdater:
             }
             pk_column = pk_map[table_name]
             
-            print(f"=== Optimized Batch Update for {table_name} ===")
+            print(f"=== Updating {table_name} ===")
             
-            # First, ensure optimal indexes exist
+            # Ensure optimal indexes exist
             self.ensure_optimal_indexes()
             
             # Count records that need updating
@@ -570,8 +357,8 @@ class NoteIdUpdater:
             
             print(f"Found {total_count} records to update in {table_name}")
             
-            # For very large datasets, offer batch processing
-            if total_count > batch_size and batch_size > 0:
+            # Choose update strategy based on dataset size
+            if total_count > batch_size:
                 return self._update_in_batches(cursor, table_name, pk_column, piece_id, tolerance, total_count, batch_size)
             else:
                 return self._update_all_at_once(cursor, table_name, pk_column, piece_id, tolerance, total_count)

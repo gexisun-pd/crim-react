@@ -7,6 +7,7 @@ import pandas as pd
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from db.db import PiecesDB
 from crim_cache_manager import cache_manager
+from utils.note_id_updater import NoteIdUpdater
 
 # Import crim_intervals for melodic intervals extraction
 try:
@@ -342,8 +343,8 @@ def insert_melodic_intervals_batch(intervals_list: List[Dict]) -> int:
     
     insert_sql = """
     INSERT INTO melodic_intervals (
-        piece_id, melodic_interval_set_id, voice, onset, interval_type, voice_name
-    ) VALUES (?, ?, ?, ?, ?, ?)
+        piece_id, melodic_interval_set_id, voice, onset, interval_type, voice_name, note_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
     """
     values_list = []
     for interval in intervals_list:
@@ -353,7 +354,8 @@ def insert_melodic_intervals_batch(intervals_list: List[Dict]) -> int:
             interval.get('voice'),
             interval.get('onset'),
             interval.get('interval_type'),
-            interval.get('voice_name')
+            interval.get('voice_name'),
+            interval.get('note_id')
         )
         values_list.append(values)
     
@@ -550,6 +552,15 @@ def ingest_melodic_intervals_for_all_pieces():
     stats = cache_manager.get_cache_stats()
     for key, value in stats.items():
         print(f"{key}: {value}")
+    
+    # Update note_id fields for newly inserted melodic intervals
+    print(f"\n=== Updating note_id fields ===")
+    try:
+        updater = NoteIdUpdater()
+        updated_count = updater.update_note_ids_batch_optimized('melodic_intervals')
+        print(f"Updated {updated_count} melodic intervals with note_id references")
+    except Exception as e:
+        print(f"Error updating note_id fields: {e}")
 
 if __name__ == "__main__":
     ingest_melodic_intervals_for_all_pieces()

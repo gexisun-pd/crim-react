@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
-Script to update note_id fields in analysis tables.
+Script to update note_id fields in analysis tables using optimized batch processing.
 
-This script can be run standalone to update note_id references
-in melodic_intervals, melodic_ngrams, and melodic_entries tables.
+This script finds and updates note_id references in melodic_intervals, melodic_ngrams, 
+and melodic_entries tables by matching piece_id, voice, and onset with the notes table.
+Uses optimized batch processing for fast performance on large datasets.
 """
 
 import os
@@ -20,7 +21,7 @@ from core.utils.note_id_updater import NoteIdUpdater
 def main():
     """Main function with argument parsing."""
     parser = argparse.ArgumentParser(
-        description='Update note_id fields in analysis tables',
+        description='Update note_id fields in analysis tables using batch processing',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -33,8 +34,8 @@ Examples:
   # Update only for a specific piece
   python scripts/update_note_ids.py --piece-id 1
   
-  # Add missing note_id columns first, then update
-  python scripts/update_note_ids.py --add-columns
+  # Use custom batch size for very large datasets
+  python scripts/update_note_ids.py --batch-size 10000
   
   # Use custom tolerance for onset matching
   python scripts/update_note_ids.py --tolerance 0.01
@@ -49,47 +50,31 @@ Examples:
                        choices=['melodic_intervals', 'melodic_ngrams', 'melodic_entries', 'all'],
                        default='all', 
                        help='Which table(s) to update (default: all)')
-    parser.add_argument('--add-columns', action='store_true',
-                       help='Add note_id columns to existing tables if missing')
-    parser.add_argument('--dry-run', action='store_true',
-                       help='Show what would be updated without making changes')
+    parser.add_argument('--batch-size', type=int, default=5000,
+                       help='Batch size for processing large datasets (default: 5000)')
     
     args = parser.parse_args()
     
-    print("=== Note ID Updater ===")
+    print("=== Note ID Updater (Batch Processing) ===")
     print(f"Table(s): {args.table}")
     if args.piece_id:
         print(f"Piece ID: {args.piece_id}")
     print(f"Tolerance: {args.tolerance}")
-    print(f"Dry run: {args.dry_run}")
+    print(f"Batch Size: {args.batch_size}")
     print()
     
     try:
         updater = NoteIdUpdater()
         
-        # Add columns if requested
-        if args.add_columns:
-            print("Adding missing note_id columns...")
-            updater.add_note_id_columns_to_existing_tables()
-            print()
-        
-        if args.dry_run:
-            print("DRY RUN MODE - No actual updates will be performed")
-            print("This feature is not implemented yet")
-            return
-        
-        # Update note_ids
+        # Update note_ids using optimized batch processing
         if args.table == 'all':
-            results = updater.update_all_note_ids(args.piece_id, args.tolerance)
-        elif args.table == 'melodic_intervals':
-            count = updater.update_melodic_intervals_note_ids(args.piece_id, args.tolerance)
-            results = {'melodic_intervals': count}
-        elif args.table == 'melodic_ngrams':
-            count = updater.update_melodic_ngrams_note_ids(args.piece_id, args.tolerance)
-            results = {'melodic_ngrams': count}
-        elif args.table == 'melodic_entries':
-            count = updater.update_melodic_entries_note_ids(args.piece_id, args.tolerance)
-            results = {'melodic_entries': count}
+            results = {}
+            for table_name in ['melodic_intervals', 'melodic_ngrams', 'melodic_entries']:
+                count = updater.update_note_ids_batch_optimized(table_name, args.piece_id, args.tolerance, args.batch_size)
+                results[table_name] = count
+        elif args.table in ['melodic_intervals', 'melodic_ngrams', 'melodic_entries']:
+            count = updater.update_note_ids_batch_optimized(args.table, args.piece_id, args.tolerance, args.batch_size)
+            results = {args.table: count}
         
         print(f"\n=== Final Results ===")
         total_updated = sum(results.values()) if isinstance(results, dict) else results
@@ -101,7 +86,7 @@ Examples:
             print(f"Total: {total_updated} records updated")
             
         if total_updated > 0:
-            print("\nSuccess! Note ID references have been updated.")
+            print("\nSuccess! Note ID references have been updated using batch processing.")
         else:
             print("\nNo records needed updating.")
             

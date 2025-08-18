@@ -486,12 +486,10 @@ def ingest_melodic_entries_for_all_pieces():
     print(f"\n=== Updating note_id fields ===")
     try:
         updater = NoteIdUpdater()
-        # Only update melodic_entries since we just inserted them
-        note_id_results = updater.update_melodic_entries_note_ids()
-        print(f"Successfully updated {note_id_results} melodic entries with note_id references")
+        updated_count = updater.update_note_ids_batch_optimized('melodic_entries')
+        print(f"Updated {updated_count} melodic entries with note_id references")
     except Exception as e:
-        print(f"Warning: Failed to update note_id fields: {e}")
-        print("You can run the note_id_updater.py script manually later to update these fields")
+        print(f"Error updating note_id fields: {e}")
 
 if __name__ == "__main__":
     ingest_melodic_entries_for_all_pieces()

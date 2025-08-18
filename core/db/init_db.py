@@ -15,27 +15,31 @@ def init_database():
     db_path = os.path.join(project_root, 'database', 'analysis.db')
     schema_path = os.path.join(project_root, 'database', 'schema.sql')
     
-    # Remove existing database to ensure clean state
-    if os.path.exists(db_path):
-        os.remove(db_path)
-        print(f"Removed existing database at {db_path}")
+    # Check if database exists
+    db_exists = os.path.exists(db_path)
+    
+    if db_exists:
+        print(f"Database already exists at {db_path}")
+        print("Preserving existing data...")
+    else:
+        print(f"Creating new database at {db_path}")
     
     # Create connection
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    # Read and execute schema
+    # Read and execute schema (this will create tables if they don't exist)
     with open(schema_path, 'r') as f:
         schema = f.read()
         cursor.executescript(schema)
     
-    # Generate and insert note_sets (combination of notes_combine_unisons)
+    # Generate and insert note_sets (only if not exists)
     create_note_sets(cursor)
     
-    # Generate and insert melodic_interval_sets (combination of melodic_intervals_kind and note_sets)
+    # Generate and insert melodic_interval_sets (only if not exists)
     create_melodic_interval_sets(cursor)
     
-    # Generate and insert melodic_ngram_sets (combination of melodic_interval_sets and ngrams parameters)
+    # Generate and insert melodic_ngram_sets (only if not exists)
     create_melodic_ngram_sets(cursor)
     
     conn.commit()
@@ -56,8 +60,13 @@ def create_note_sets(cursor):
         )
     ''')
     
-    # Clear existing data
-    cursor.execute('DELETE FROM note_sets')
+    # Check if data already exists
+    cursor.execute('SELECT COUNT(*) FROM note_sets')
+    existing_count = cursor.fetchone()[0]
+    
+    if existing_count > 0:
+        print(f"Note sets already exist ({existing_count} sets), skipping creation")
+        return
     
     # Insert all combinations
     for combine_unisons in CONFIG['notes_combine_unisons']:
@@ -73,10 +82,9 @@ def create_note_sets(cursor):
 
 def create_melodic_interval_sets(cursor):
     """Create melodic_interval_sets table with all combinations of kind and note_sets"""
-    # Drop and recreate melodic_interval_sets table
-    cursor.execute('DROP TABLE IF EXISTS melodic_interval_sets')
+    # Create melodic_interval_sets table if not exists
     cursor.execute('''
-        CREATE TABLE melodic_interval_sets (
+        CREATE TABLE IF NOT EXISTS melodic_interval_sets (
             set_id INTEGER PRIMARY KEY AUTOINCREMENT,
             kind TEXT NOT NULL,
             note_set_id INTEGER NOT NULL,
@@ -87,6 +95,14 @@ def create_melodic_interval_sets(cursor):
             FOREIGN KEY (note_set_id) REFERENCES note_sets (set_id) ON DELETE CASCADE
         )
     ''')
+    
+    # Check if data already exists
+    cursor.execute('SELECT COUNT(*) FROM melodic_interval_sets')
+    existing_count = cursor.fetchone()[0]
+    
+    if existing_count > 0:
+        print(f"Melodic interval sets already exist ({existing_count} sets), skipping creation")
+        return
     
     # Get all note_sets first
     cursor.execute('SELECT set_id, slug, combine_unisons FROM note_sets')
@@ -113,10 +129,9 @@ def create_melodic_interval_sets(cursor):
 
 def create_melodic_ngram_sets(cursor):
     """Create melodic_ngram_sets table with all combinations of melodic_interval_sets and ngram parameters"""
-    # Drop and recreate melodic_ngram_sets table
-    cursor.execute('DROP TABLE IF EXISTS melodic_ngram_sets')
+    # Create melodic_ngram_sets table if not exists
     cursor.execute('''
-        CREATE TABLE melodic_ngram_sets (
+        CREATE TABLE IF NOT EXISTS melodic_ngram_sets (
             set_id INTEGER PRIMARY KEY AUTOINCREMENT,
             melodic_interval_set_id INTEGER NOT NULL,
             ngrams_number INTEGER NOT NULL,
@@ -130,6 +145,14 @@ def create_melodic_ngram_sets(cursor):
             FOREIGN KEY (parent_set_id) REFERENCES melodic_ngram_sets (set_id) ON DELETE CASCADE
         )
     ''')
+    
+    # Check if data already exists
+    cursor.execute('SELECT COUNT(*) FROM melodic_ngram_sets')
+    existing_count = cursor.fetchone()[0]
+    
+    if existing_count > 0:
+        print(f"Melodic ngram sets already exist ({existing_count} sets), skipping creation")
+        return
     
     # Get all melodic_interval_sets first
     cursor.execute('SELECT set_id, slug, kind FROM melodic_interval_sets')
@@ -175,5 +198,41 @@ def create_melodic_ngram_sets(cursor):
     total_count = cursor.fetchone()[0]
     print(f"Created {total_count} melodic ngram sets ({total_count//2} parent sets, {total_count//2} child sets)")
 
+def reset_parameter_sets():
+    """Reset only parameter sets tables, preserving all data tables"""
+    db_path = os.path.join(project_root, 'database', 'analysis.db')
+    
+    if not os.path.exists(db_path):
+        print("Database does not exist. Run init_database() first.")
+        return
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    print("Resetting parameter sets while preserving data...")
+    
+    # Drop and recreate parameter set tables in correct order (respecting foreign keys)
+    cursor.execute('DROP TABLE IF EXISTS melodic_ngram_sets')
+    cursor.execute('DROP TABLE IF EXISTS melodic_interval_sets') 
+    cursor.execute('DROP TABLE IF EXISTS note_sets')
+    
+    # Recreate parameter sets
+    create_note_sets(cursor)
+    create_melodic_interval_sets(cursor) 
+    create_melodic_ngram_sets(cursor)
+    
+    conn.commit()
+    conn.close()
+    print("Parameter sets reset successfully")
+
 if __name__ == "__main__":
-    init_database()
+    import argparse
+    parser = argparse.ArgumentParser(description='Initialize database')
+    parser.add_argument('--reset-params', action='store_true',
+                       help='Reset only parameter sets, preserve data')
+    args = parser.parse_args()
+    
+    if args.reset_params:
+        reset_parameter_sets()
+    else:
+        init_database()

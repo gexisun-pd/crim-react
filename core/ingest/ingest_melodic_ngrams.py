@@ -7,6 +7,7 @@ import pandas as pd
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from db.db import PiecesDB
 from crim_cache_manager import cache_manager
+from utils.note_id_updater import NoteIdUpdater
 
 # Import crim_intervals for melodic ngrams extraction
 try:
@@ -239,8 +240,8 @@ def insert_melodic_ngrams_batch(ngrams_list: List[Dict]) -> int:
     
     insert_sql = """
     INSERT INTO melodic_ngrams (
-        piece_id, melodic_ngram_set_id, voice, onset, ngram, ngram_length, voice_name
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        piece_id, melodic_ngram_set_id, voice, onset, ngram, ngram_length, voice_name, note_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """
     
     values_list = []
@@ -252,7 +253,8 @@ def insert_melodic_ngrams_batch(ngrams_list: List[Dict]) -> int:
             ngram.get('onset'),
             ngram.get('ngram'),
             ngram.get('ngram_length'),
-            ngram.get('voice_name')
+            ngram.get('voice_name'),
+            ngram.get('note_id')
         )
         values_list.append(values)
     
@@ -458,6 +460,15 @@ def ingest_melodic_ngrams_for_all_pieces():
     stats = cache_manager.get_cache_stats()
     for key, value in stats.items():
         print(f"{key}: {value}")
+    
+    # Update note_id fields for newly inserted melodic n-grams
+    print(f"\n=== Updating note_id fields ===")
+    try:
+        updater = NoteIdUpdater()
+        updated_count = updater.update_note_ids_batch_optimized('melodic_ngrams')
+        print(f"Updated {updated_count} melodic n-grams with note_id references")
+    except Exception as e:
+        print(f"Error updating note_id fields: {e}")
 
 if __name__ == "__main__":
     ingest_melodic_ngrams_for_all_pieces()
