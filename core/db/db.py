@@ -127,6 +127,30 @@ class PiecesDB:
                 conn.close()
             return []
     
+    def get_piece_by_id(self, piece_id: int) -> Dict:
+        """Get a specific piece by its ID"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT * FROM pieces WHERE piece_id = ?", (piece_id,))
+            row = cursor.fetchone()
+            
+            if row:
+                columns = [description[0] for description in cursor.description]
+                piece = dict(zip(columns, row))
+            else:
+                piece = {}
+            
+            conn.close()
+            return piece
+            
+        except sqlite3.Error as e:
+            print(f"Database error retrieving piece {piece_id}: {e}")
+            if conn:
+                conn.close()
+            return {}
+    
     def get_all_note_sets(self) -> List[Dict]:
         """Get all note sets from the database"""
         try:
@@ -342,6 +366,58 @@ class PiecesDB:
             if conn:
                 conn.close()
             return []
+    
+    def get_notes_for_piece_and_set(self, piece_id: int, note_set_id: int) -> List[Dict]:
+        """Get all notes for a specific piece and note set"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT n.*, v.voice_name 
+                FROM notes n
+                LEFT JOIN voices v ON n.voice_id = v.voice_id AND n.piece_id = v.piece_id
+                WHERE n.piece_id = ? AND n.set_id = ?
+                ORDER BY n.onset, n.voice_id
+            """, (piece_id, note_set_id))
+            
+            rows = cursor.fetchall()
+            columns = [description[0] for description in cursor.description]
+            notes = [dict(zip(columns, row)) for row in rows]
+            
+            conn.close()
+            return notes
+            
+        except sqlite3.Error as e:
+            print(f"Database error retrieving notes for piece {piece_id}, set {note_set_id}: {e}")
+            if conn:
+                conn.close()
+            return []
+    
+    def get_note_by_id(self, note_id: int) -> Dict:
+        """Get a specific note by its note_id"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT * FROM notes WHERE note_id = ?", (note_id,))
+            
+            row = cursor.fetchone()
+            
+            if row:
+                columns = [description[0] for description in cursor.description]
+                note = dict(zip(columns, row))
+                conn.close()
+                return note
+            else:
+                conn.close()
+                return None
+            
+        except sqlite3.Error as e:
+            print(f"Database error retrieving note {note_id}: {e}")
+            if conn:
+                conn.close()
+            return None
     
     def update_notes_is_entry_batch(self, note_ids_with_entry_status: List[Dict]) -> int:
         """Update is_entry field for multiple notes

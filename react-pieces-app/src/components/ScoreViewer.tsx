@@ -12,7 +12,7 @@ declare global {
 
 interface ScoreViewerProps {
   piece: Piece | null;
-  onNoteClick?: (noteId: string, element: Element) => void;
+  onNoteClick?: (noteDetails: any) => void;
   className?: string;
 }
 
@@ -101,6 +101,8 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
         const svg = verovio.renderToSVG(1);
         setSvgContent(svg);
         
+        console.log('Score loaded successfully for piece:', piece.title);
+        
       } catch (err) {
         console.error('Error loading score:', err);
         setError(err instanceof Error ? err.message : 'Unknown error occurred');
@@ -116,15 +118,74 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
   useEffect(() => {
     if (!containerRef.current || !svgContent || !onNoteClick) return;
 
-    const handleSvgClick = (event: MouseEvent) => {
+    const handleSvgClick = async (event: MouseEvent) => {
       const target = event.target as Element;
       
-      // 查找被点击的音符元素
-      const noteElement = target.closest('.note, .chord');
+      // 查找被点击的音符元素 - Verovio 通常使用 'note' 类
+      const noteElement = target.closest('.note');
+      
       if (noteElement) {
-        const noteId = noteElement.id;
-        if (noteId) {
-          onNoteClick(noteId, noteElement);
+        try {
+          console.log('Clicked note element:', noteElement);
+          
+          // 尝试从 SVG 结构中提取位置信息
+          const notePosition = extractNotePosition(noteElement);
+          
+          if (notePosition && piece) {
+            console.log('Extracted note position:', notePosition);
+            
+            // 调用 API 查找对应的 note_id
+            const response = await fetch('http://localhost:5000/api/notes/find-by-position', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                piece_id: piece.id,
+                voice: notePosition.voice,
+                onset: notePosition.onset,
+                tolerance: 2.0  // 大幅增加容错范围以适应估算误差
+              })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success && data.data) {
+              console.log('Found note details:', data.data);
+              
+              // 高亮点击的音符
+              highlightNote(noteElement);
+              
+              // 调用回调函数传递音符详情
+              onNoteClick(data.data.note_details);
+            } else {
+              console.warn('Could not find note in database:', data.error);
+              
+              // 即使没找到数据库记录，也可以显示一些信息
+              onNoteClick({
+                message: 'Note clicked but not found in database',
+                svg_element_id: noteElement.getAttribute('id'),
+                estimated_position: notePosition,
+                error: data.error
+              });
+            }
+          } else {
+            console.warn('Could not extract position from note element');
+            
+            // 显示基本信息
+            onNoteClick({
+              message: 'Note clicked - position extraction failed',
+              svg_element_id: noteElement.getAttribute('id'),
+              svg_element_class: noteElement.getAttribute('class')
+            });
+          }
+          
+        } catch (error) {
+          console.error('Error handling note click:', error);
+          onNoteClick({
+            message: 'Error processing note click',
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
         }
       }
     };
@@ -134,13 +195,100 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
       svgElement.addEventListener('click', handleSvgClick);
       
       // 添加鼠标悬停效果
-      svgElement.style.cursor = 'pointer';
+      const noteElements = svgElement.querySelectorAll('.note');
+      noteElements.forEach(noteEl => {
+        (noteEl as HTMLElement).style.cursor = 'pointer';
+        
+        noteEl.addEventListener('mouseenter', () => {
+          (noteEl as HTMLElement).style.opacity = '0.8';
+        });
+        
+        noteEl.addEventListener('mouseleave', () => {
+          if (!noteEl.classList.contains('note-selected')) {
+            (noteEl as HTMLElement).style.opacity = '1';
+          }
+        });
+      });
       
       return () => {
         svgElement.removeEventListener('click', handleSvgClick);
       };
     }
-  }, [svgContent, onNoteClick]);
+  }, [svgContent, onNoteClick, piece]);
+  
+  // 提取音符位置信息的辅助函数
+  const extractNotePosition = (noteElement: Element): { voice: number; onset: number } | null => {
+    try {
+      // 策略1: 尝试从父元素中提取measure和layer信息
+      let currentElement = noteElement as Element;
+      let measureNumber = 1;
+      let layerNumber = 1;
+      
+      // 向上遍历寻找measure信息
+      while (currentElement && currentElement.tagName !== 'svg') {
+        const elementClass = currentElement.getAttribute('class') || '';
+        const elementId = currentElement.getAttribute('id') || '';
+        
+        // 查找measure信息
+        if (elementClass.includes('measure') || elementId.includes('measure')) {
+          const measureMatch = elementId.match(/measure-(\d+)/);
+          if (measureMatch) {
+            measureNumber = parseInt(measureMatch[1]);
+          }
+        }
+        
+        // 查找layer/voice信息
+        if (elementClass.includes('layer') || elementId.includes('layer')) {
+          const layerMatch = elementId.match(/layer-(\d+)/);
+          if (layerMatch) {
+            layerNumber = parseInt(layerMatch[1]);
+          }
+        }
+        
+        currentElement = currentElement.parentElement as Element;
+      }
+      
+      // 策略2: 根据在SVG中的位置估算onset
+      // 这是一个简化的方法，实际应用中可能需要更复杂的计算
+      const svgElement = containerRef.current?.querySelector('svg');
+      if (svgElement) {
+        const allNotes = Array.from(svgElement.querySelectorAll('.note'));
+        const noteIndex = allNotes.indexOf(noteElement);
+        
+        // 简单估算：每个音符大约0.5拍
+        const estimatedOnset = noteIndex * 0.5;
+        
+        return {
+          voice: layerNumber,
+          onset: estimatedOnset
+        };
+      }
+      
+      return null;
+      
+    } catch (error) {
+      console.error('Error extracting note position:', error);
+      return null;
+    }
+  };
+  
+  // 高亮音符的辅助函数
+  const highlightNote = (noteElement: Element) => {
+    // 清除之前的高亮
+    const svgElement = containerRef.current?.querySelector('svg');
+    if (svgElement) {
+      svgElement.querySelectorAll('.note-selected').forEach(el => {
+        el.classList.remove('note-selected');
+        (el as HTMLElement).style.opacity = '1';
+        (el as HTMLElement).style.fill = '';
+      });
+    }
+    
+    // 添加新的高亮
+    noteElement.classList.add('note-selected');
+    (noteElement as HTMLElement).style.opacity = '1';
+    (noteElement as HTMLElement).style.fill = '#ff6b6b';
+  };
 
   if (loading) {
     return (

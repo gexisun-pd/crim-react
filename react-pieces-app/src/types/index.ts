@@ -16,12 +16,17 @@ export interface NoteSet {
 }
 
 export interface Note {
-  note_id: number;
-  onset: number;
+  id: number;
+  piece_id: number;
   voice_id: number;
-  voice_name?: string;
-  pitch_name?: string;
-  midi_note?: number;
+  voice_name: string;
+  measure_number: number;
+  onset: number;
+  offset: number;
+  duration: number;
+  pitch_name: string;
+  octave: number;
+  midi_note: number;
   is_entry: boolean;
 }
 
