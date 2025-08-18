@@ -169,159 +169,131 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
         try {
           console.log('Clicked note element:', noteElement);
           
-          // 获取SVG中所有音符元素来确定索引
-          const svgElement = containerRef.current?.querySelector('svg');
-          if (svgElement) {
-            const allNotes = Array.from(svgElement.querySelectorAll('.note'));
-            const noteIndex = allNotes.indexOf(noteElement);
+          // 从SVG中提取音符的位置信息
+          const svgPosition = extractNotePositionFromSVG(noteElement);
+          
+          if (svgPosition && piece) {
+            console.log('SVG Position extracted:', svgPosition);
             
-            console.log(`Note clicked: SVG index ${noteIndex}`);
-            
-            // 使用music21分析获取中间层的onset信息
-            if (piece) {
-              const response = await fetch(`http://localhost:5000/api/pieces/${piece.id}/analyze-with-music21`, {
+            // 直接用SVG位置信息在数据库两个note sets中搜索
+            try {
+              // 搜索note_set_id = 1
+              const set1Response = await fetch(`http://localhost:5000/api/pieces/${piece.id}/notes/find-by-position`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ svg_index: noteIndex })
+                body: JSON.stringify({ 
+                  measure: svgPosition.measure,
+                  beat: svgPosition.beat,
+                  voice: svgPosition.voice,
+                  note_set_id: 1,
+                  tolerance: 0.25  // beat tolerance
+                })
               });
               
-              if (response.ok) {
-                const data = await response.json();
-                if (data.success) {
-                  const music21Data = data.data;
-                  console.log('Music21 analysis result:', music21Data);
-                  
-                  // 现在使用中间层给出的onset在数据库中的两个note_sets中精确匹配
-                  const onset = music21Data.onset;
-                  const voice = music21Data.voice_id;
-                  
-                  console.log(`Searching database for exact match: onset=${onset}, voice=${voice}`);
-                  
-                  try {
-                    // 搜索note_set_id = 1
-                    const set1Response = await fetch(`http://localhost:5000/api/pieces/${piece.id}/notes/find-exact`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify({ 
-                        onset: onset,
-                        voice: voice,
-                        note_set_id: 1
-                      })
-                    });
-                    
-                    // 搜索note_set_id = 2  
-                    const set2Response = await fetch(`http://localhost:5000/api/pieces/${piece.id}/notes/find-exact`, {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                      body: JSON.stringify({ 
-                        onset: onset,
-                        voice: voice,
-                        note_set_id: 2
-                      })
-                    });
-                    
-                    let set1Match = null;
-                    let set2Match = null;
-                    
-                    // 处理set1响应
-                    if (set1Response.ok) {
-                      const set1Data = await set1Response.json();
-                      if (set1Data.success && set1Data.note && set1Data.note.onset === onset) {
-                        set1Match = set1Data.note;
-                        console.log('Found exact match in set 1:', set1Match);
-                      } else {
-                        console.log('No exact match in set 1');
-                      }
-                    } else {
-                      console.log('Error querying set 1');
-                    }
-                    
-                    // 处理set2响应
-                    if (set2Response.ok) {
-                      const set2Data = await set2Response.json();
-                      if (set2Data.success && set2Data.note && set2Data.note.onset === onset) {
-                        set2Match = set2Data.note;
-                        console.log('Found exact match in set 2:', set2Match);
-                      } else {
-                        console.log('No exact match in set 2');
-                      }
-                    } else {
-                      console.log('Error querying set 2');
-                    }
-                    
-                    // 构建完整的响应数据
-                    const enrichedData = {
-                      // 中间层music21的信息
-                      music21_analysis: music21Data,
-                      svg_index: noteIndex,
-                      
-                      // 数据库精确匹配的结果
-                      database_matches: {
-                        note_set_1: set1Match,
-                        note_set_2: set2Match
-                      },
-                      
-                      // 搜索参数
-                      search_criteria: {
-                        onset: onset,
-                        voice: voice,
-                        exact_match_required: true
-                      }
-                    };
-                    
-                    // 高亮点击的音符
-                    highlightNote(noteElement);
-                    
-                    console.log('Final enriched data:', enrichedData);
-                    onNoteClick(enrichedData);
-                    return;
-                    
-                  } catch (dbError) {
-                    console.error('Error searching database:', dbError);
-                    
-                    // 如果数据库搜索失败，仍然显示music21的分析结果
-                    const fallbackData = {
-                      music21_analysis: music21Data,
-                      svg_index: noteIndex,
-                      database_matches: {
-                        note_set_1: null,
-                        note_set_2: null
-                      },
-                      search_criteria: {
-                        onset: onset,
-                        voice: voice,
-                        exact_match_required: true
-                      },
-                      error: 'Failed to search database for exact matches'
-                    };
-                    
-                    highlightNote(noteElement);
-                    onNoteClick(fallbackData);
-                    return;
-                  }
+              // 搜索note_set_id = 2  
+              const set2Response = await fetch(`http://localhost:5000/api/pieces/${piece.id}/notes/find-by-position`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                  measure: svgPosition.measure,
+                  beat: svgPosition.beat,
+                  voice: svgPosition.voice,
+                  note_set_id: 2,
+                  tolerance: 0.25
+                })
+              });
+              
+              let set1Match = null;
+              let set2Match = null;
+              
+              // 处理set1响应
+              if (set1Response.ok) {
+                const set1Data = await set1Response.json();
+                if (set1Data.success && set1Data.note) {
+                  set1Match = set1Data.note;
+                  console.log('Found match in set 1:', set1Match);
+                } else {
+                  console.log('No match in set 1');
                 }
+              } else {
+                console.log('Error querying set 1');
               }
+              
+              // 处理set2响应
+              if (set2Response.ok) {
+                const set2Data = await set2Response.json();
+                if (set2Data.success && set2Data.note) {
+                  set2Match = set2Data.note;
+                  console.log('Found match in set 2:', set2Match);
+                } else {
+                  console.log('No match in set 2');
+                }
+              } else {
+                console.log('Error querying set 2');
+              }
+              
+              // 构建完整的响应数据
+              const enrichedData = {
+                // SVG分析的信息
+                svg_analysis: svgPosition,
+                
+                // 数据库匹配的结果
+                database_matches: {
+                  note_set_1: set1Match,
+                  note_set_2: set2Match
+                },
+                
+                // 搜索参数
+                search_criteria: {
+                  measure: svgPosition.measure,
+                  beat: svgPosition.beat,
+                  voice: svgPosition.voice,
+                  position_based_search: true
+                }
+              };
+              
+              // 高亮点击的音符
+              highlightNote(noteElement);
+              
+              console.log('Final enriched data:', enrichedData);
+              onNoteClick(enrichedData);
+              return;
+              
+            } catch (dbError) {
+              console.error('Error searching database:', dbError);
+              
+              // 如果数据库搜索失败，仍然显示SVG的分析结果
+              const fallbackData = {
+                svg_analysis: svgPosition,
+                database_matches: {
+                  note_set_1: null,
+                  note_set_2: null
+                },
+                search_criteria: {
+                  measure: svgPosition.measure,
+                  beat: svgPosition.beat,
+                  voice: svgPosition.voice,
+                  position_based_search: true
+                },
+                error: 'Failed to search database'
+              };
+              
+              highlightNote(noteElement);
+              onNoteClick(fallbackData);
+              return;
             }
-            
-            // 如果music21分析失败，显示基本信息
-            console.warn('Music21 analysis failed');
-            
-            // Get noteIndex for fallback reporting
-            const fallbackAllNotes = Array.from(svgElement.querySelectorAll('.note'));
-            const fallbackNoteIndex = fallbackAllNotes.indexOf(noteElement);
-            
+          } else {
+            // SVG位置提取失败
+            console.warn('Failed to extract SVG position');
             onNoteClick({
-              message: 'Note clicked but could not analyze with music21',
+              message: 'Note clicked but could not extract position from SVG',
               svg_element_id: noteElement.getAttribute('id'),
               svg_element_class: noteElement.getAttribute('class'),
-              svg_index: fallbackNoteIndex,
-              music21_analysis: null,
+              svg_analysis: null,
               database_matches: {
                 note_set_1: null,
                 note_set_2: null
@@ -332,19 +304,10 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
         } catch (error) {
           console.error('Error handling note click:', error);
           
-          // Get noteIndex for error reporting
-          const svgElement = containerRef.current?.querySelector('svg');
-          let errorNoteIndex = -1;
-          if (svgElement) {
-            const errorAllNotes = Array.from(svgElement.querySelectorAll('.note'));
-            errorNoteIndex = errorAllNotes.indexOf(noteElement);
-          }
-          
           onNoteClick({
             message: 'Error processing note click',
             error: error instanceof Error ? error.message : 'Unknown error',
-            svg_index: errorNoteIndex,
-            music21_analysis: null,
+            svg_analysis: null,
             database_matches: {
               note_set_1: null,
               note_set_2: null
@@ -379,6 +342,89 @@ const ScoreViewer: React.FC<ScoreViewerProps> = ({
       };
     }
   }, [svgContent, onNoteClick, piece]);
+  
+  // 从SVG元素中提取音符位置信息的辅助函数
+  const extractNotePositionFromSVG = (noteElement: Element): { 
+    measure: number; 
+    beat: number; 
+    voice: number; 
+    pitch?: string;
+    svg_id?: string;
+  } | null => {
+    try {
+      let currentElement = noteElement as Element;
+      let measureNumber = 1;
+      let layerNumber = 1;
+      const svg_id = noteElement.getAttribute('id') || '';
+      
+      console.log('Extracting position from SVG element:', svg_id);
+      
+      // 向上遍历DOM树寻找measure和layer信息
+      while (currentElement && currentElement.tagName !== 'svg') {
+        const elementId = currentElement.getAttribute('id') || '';
+        const elementClass = currentElement.getAttribute('class') || '';
+        
+        // 查找measure信息 - Verovio用类似 "measure-L1F1N1M2" 的格式
+        if (elementId.includes('measure-') || elementClass.includes('measure')) {
+          const measureMatch = elementId.match(/[mM](\d+)/);
+          if (measureMatch) {
+            measureNumber = parseInt(measureMatch[1]);
+            console.log('Found measure:', measureNumber);
+          }
+        }
+        
+        // 查找layer/voice信息 - Verovio用类似 "layer-L1F1N1" 的格式
+        if (elementId.includes('layer-') || elementClass.includes('layer') || elementId.includes('staff-')) {
+          const layerMatch = elementId.match(/[lL](\d+)/);
+          const staffMatch = elementId.match(/staff-(\d+)/);
+          if (layerMatch) {
+            layerNumber = parseInt(layerMatch[1]);
+            console.log('Found layer:', layerNumber);
+          } else if (staffMatch) {
+            layerNumber = parseInt(staffMatch[1]);
+            console.log('Found staff as voice:', layerNumber);
+          }
+        }
+        
+        currentElement = currentElement.parentElement as Element;
+      }
+      
+      // 计算beat位置 - 从音符在小节中的相对位置估算
+      let beat = 1.0;
+      const svgElement = containerRef.current?.querySelector('svg');
+      if (svgElement) {
+        // 尝试找到包含这个音符的measure元素
+        const measureElement = noteElement.closest('[id*="measure-"]');
+        if (measureElement) {
+          const measureRect = measureElement.getBoundingClientRect();
+          const noteRect = noteElement.getBoundingClientRect();
+          const relativeX = noteRect.left - measureRect.left;
+          const measureWidth = measureRect.width;
+          
+          if (measureWidth > 0) {
+            // 假设4/4拍，根据相对位置估算beat (1-5范围，因为可能有超过4拍的小节)
+            beat = 1 + (relativeX / measureWidth) * 4;
+            beat = Math.max(1, Math.round(beat * 4) / 4); // 四分之一拍精度
+            console.log('Calculated beat:', beat);
+          }
+        }
+      }
+      
+      const result = {
+        measure: measureNumber,
+        beat: beat,
+        voice: layerNumber,
+        svg_id: svg_id
+      };
+      
+      console.log('Extracted SVG position:', result);
+      return result;
+      
+    } catch (error) {
+      console.error('Error extracting note position from SVG:', error);
+      return null;
+    }
+  };
   
   // 提取音符位置信息的辅助函数
   const extractNotePosition = (noteElement: Element): { voice: number; onset: number } | null => {

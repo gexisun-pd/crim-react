@@ -210,71 +210,6 @@ def get_piece_musicxml(piece_id):
             'error': str(e)
         }), 500
 
-@pieces_bp.route('/notes/find-by-position', methods=['POST'])
-def find_note_by_position():
-    """Find note_id by piece_id, voice, and onset position"""
-    try:
-        data = request.json
-        if not data:
-            return jsonify({
-                'success': False,
-                'error': 'JSON data required'
-            }), 400
-        
-        piece_id = data.get('piece_id')
-        voice = data.get('voice') 
-        onset = data.get('onset')
-        tolerance = data.get('tolerance', 0.001)
-        
-        if piece_id is None or voice is None or onset is None:
-            return jsonify({
-                'success': False,
-                'error': 'piece_id, voice, and onset are required'
-            }), 400
-        
-        # Use the existing NoteIdUpdater functionality
-        sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'core', 'utils'))
-        from note_id_updater import NoteIdUpdater
-        
-        updater = NoteIdUpdater()
-        note_id = updater.find_note_id(piece_id, voice, onset, tolerance)
-        
-        if note_id is None:
-            return jsonify({
-                'success': False,
-                'error': f'No note found for piece_id={piece_id}, voice={voice}, onset={onset}'
-            }), 404
-        
-        # Get detailed note information
-        db = PiecesDB()
-        note_details = db.get_note_by_id(note_id)
-        
-        if not note_details:
-            return jsonify({
-                'success': False,
-                'error': f'Note details not found for note_id={note_id}'
-            }), 404
-        
-        return jsonify({
-            'success': True,
-            'data': {
-                'note_id': note_id,
-                'search_params': {
-                    'piece_id': piece_id,
-                    'voice': voice,
-                    'onset': onset,
-                    'tolerance': tolerance
-                },
-                'note_details': note_details
-            }
-        })
-    
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
 @pieces_bp.route('/notes/<int:note_id>/details', methods=['GET'])
 def get_note_details(note_id):
     """Get detailed information for a specific note by note_id"""
@@ -345,6 +280,109 @@ def get_svg_note_mapping(piece_id):
             'svg_notes_count': len(mapping),
             'database_notes_count': len(db_notes)
         })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@pieces_bp.route('/pieces/<int:piece_id>/notes/find-by-position', methods=['POST'])
+def find_note_by_svg_position(piece_id):
+    """Find note by measure, beat, voice and note_set_id"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'JSON data required'
+            }), 400
+        
+        measure = data.get('measure')
+        beat = data.get('beat')
+        voice = data.get('voice')
+        note_set_id = data.get('note_set_id', 1)
+        tolerance = data.get('tolerance', 0.25)  # beat tolerance
+        
+        if measure is None or beat is None or voice is None:
+            return jsonify({
+                'success': False,
+                'error': 'measure, beat, and voice are required'
+            }), 400
+        
+        db = PiecesDB()
+        
+        # Verify piece exists
+        piece = db.get_piece_by_id(piece_id)
+        if not piece:
+            return jsonify({
+                'success': False,
+                'error': 'Piece not found'
+            }), 404
+        
+        # Search for match using direct SQL query with beat tolerance
+        import sqlite3
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        db_path = os.path.join(project_root, 'database', 'analysis.db')
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Query for position-based match with tolerance
+        cursor.execute("""
+            SELECT note_id, piece_id, note_set_id, voice, voice_name, onset, duration, 
+                   offset, measure, beat, pitch, name, step, octave, `alter`, type, staff, tie,
+                   ABS(beat - ?) as beat_distance
+            FROM notes 
+            WHERE piece_id = ? AND note_set_id = ? AND voice = ? AND measure = ? 
+              AND ABS(beat - ?) <= ?
+            ORDER BY beat_distance ASC
+            LIMIT 1
+        """, (beat, piece_id, note_set_id, voice, measure, beat, tolerance))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            # Convert row to dictionary
+            columns = ['note_id', 'piece_id', 'note_set_id', 'voice', 'voice_name', 
+                      'onset', 'duration', 'offset', 'measure', 'beat', 'pitch', 
+                      'name', 'step', 'octave', 'alter', 'type', 'staff', 'tie', 'beat_distance']
+            note = dict(zip(columns, row))
+            
+            # Remove the beat_distance from the result
+            del note['beat_distance']
+            
+            return jsonify({
+                'success': True,
+                'note': note,
+                'search_criteria': {
+                    'piece_id': piece_id,
+                    'note_set_id': note_set_id,
+                    'measure': measure,
+                    'beat': beat,
+                    'voice': voice,
+                    'tolerance': tolerance,
+                    'match_type': 'position_based'
+                }
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'note': None,
+                'message': f'No match found for piece_id={piece_id}, note_set_id={note_set_id}, measure={measure}, beat={beat}, voice={voice} (tolerance={tolerance})',
+                'search_criteria': {
+                    'piece_id': piece_id,
+                    'note_set_id': note_set_id,
+                    'measure': measure,
+                    'beat': beat,
+                    'voice': voice,
+                    'tolerance': tolerance,
+                    'match_type': 'position_based'
+                }
+            })
     
     except Exception as e:
         import traceback
