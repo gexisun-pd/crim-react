@@ -112,7 +112,7 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
     });
   };
 
-  const handleNoteClick = (event: MouseEvent) => {
+  const handleNoteClick = async (event: MouseEvent) => {
     const target = event.target as SVGElement;
     
     // 使用OSMD的正确API查找被点击的音符
@@ -133,42 +133,81 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
         (noteInfo.svgElement as HTMLElement).style.opacity = '1';
       }
       
-      const noteDetails = {
-        osmd_analysis: {
-          measure: noteInfo.measureNumber,
-          beat: noteInfo.beat,
-          voice_id: noteInfo.partId, // Part ID (真正的声部编号)
-          voice_name: noteInfo.partName, // Part Name (真正的声部名称)
-          part_id: noteInfo.partId, // 新增：明确的 part 信息
-          part_name: noteInfo.partName,
-          voice_index: noteInfo.voiceIndex, // Voice 是 Part 内的子层
-          pitch: noteInfo.pitch,
-          duration: noteInfo.duration,
-          extraction_method: 'osmd_api_with_parts'
-        },
-        svg_analysis: {
-          measure: noteInfo.measureNumber,
-          beat: noteInfo.beat,
-          voice: noteInfo.partName, // 保持兼容性
-          voice_id: noteInfo.partId,
-          voice_name: noteInfo.partName,
-          part_id: noteInfo.partId,
-          part_name: noteInfo.partName,
-          svg_id: noteInfo.svgElement?.id || 'unknown'
-        },
-        search_criteria: {
-          measure: noteInfo.measureNumber,
-          beat: noteInfo.beat,
-          voice: noteInfo.partId, // 使用 Part ID 进行搜索
-          voice_name: noteInfo.partName,
-          part_id: noteInfo.partId,
-          part_name: noteInfo.partName,
-          position_based_search: true
-        },
-        raw_osmd_data: noteInfo
-      };
-      
-      onNoteClick(noteDetails);
+      // 调用新的API来搜索数据库中的音符
+      try {
+        const searchResponse = await fetch(`http://localhost:5000/api/pieces/${piece!.id}/notes/search-by-osmd`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            measure: noteInfo.measureNumber,
+            beat: noteInfo.beat,
+            part_id: noteInfo.partId,
+            tolerance: 0.25
+          })
+        });
+
+        const searchResult = await searchResponse.json();
+        
+        const noteDetails = {
+          osmd_analysis: {
+            measure: noteInfo.measureNumber,
+            beat: noteInfo.beat,
+            voice_id: noteInfo.partId, // Part ID (真正的声部编号)
+            voice_name: noteInfo.partName, // Part Name (真正的声部名称)
+            part_id: noteInfo.partId, // 新增：明确的 part 信息
+            part_name: noteInfo.partName,
+            voice_index: noteInfo.voiceIndex, // Voice 是 Part 内的子层
+            pitch: noteInfo.pitch,
+            duration: noteInfo.duration,
+            extraction_method: 'osmd_api_with_parts'
+          },
+          database_matches: searchResult.success ? searchResult.database_matches : null,
+          search_criteria: searchResult.success ? searchResult.search_criteria : {
+            measure: noteInfo.measureNumber,
+            beat: noteInfo.beat,
+            part_id: noteInfo.partId,
+            voice: noteInfo.partId,
+            position_based_search: true
+          },
+          error: searchResult.success ? null : searchResult.error,
+          raw_osmd_data: noteInfo
+        };
+        
+        onNoteClick(noteDetails);
+        
+      } catch (error) {
+        console.error('Error searching database:', error);
+        
+        // 如果API调用失败，仍然返回OSMD分析结果
+        const noteDetails = {
+          osmd_analysis: {
+            measure: noteInfo.measureNumber,
+            beat: noteInfo.beat,
+            voice_id: noteInfo.partId,
+            voice_name: noteInfo.partName,
+            part_id: noteInfo.partId,
+            part_name: noteInfo.partName,
+            voice_index: noteInfo.voiceIndex,
+            pitch: noteInfo.pitch,
+            duration: noteInfo.duration,
+            extraction_method: 'osmd_api_with_parts'
+          },
+          database_matches: null,
+          search_criteria: {
+            measure: noteInfo.measureNumber,
+            beat: noteInfo.beat,
+            part_id: noteInfo.partId,
+            voice: noteInfo.partId,
+            position_based_search: true
+          },
+          error: `API调用失败: ${(error as Error).message}`,
+          raw_osmd_data: noteInfo
+        };
+        
+        onNoteClick(noteDetails);
+      }
     }
   };
 

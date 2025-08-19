@@ -482,85 +482,100 @@ def find_exact_note_match(piece_id):
             'error': str(e)
         }), 500
 
-@pieces_bp.route('/pieces/<int:piece_id>/analyze-with-music21', methods=['POST'])
-def analyze_piece_with_music21(piece_id):
-    """Analyze piece with music21 and return note at specific SVG position"""
+@pieces_bp.route('/pieces/<int:piece_id>/notes/search-by-osmd', methods=['POST'])
+def search_notes_by_osmd_data(piece_id):
+    """Search notes in both note sets using OSMD extracted measure, beat, and part data"""
     try:
         data = request.get_json()
-        svg_index = data.get('svg_index')
-        
-        if svg_index is None:
+        if not data:
             return jsonify({
                 'success': False,
-                'error': 'svg_index is required'
+                'error': 'JSON data required'
+            }), 400
+        
+        measure = data.get('measure')
+        beat = data.get('beat') 
+        part_id = data.get('part_id') or data.get('voice')  # 支持两种字段名
+        tolerance = data.get('tolerance', 0.25)  # beat tolerance
+        
+        if measure is None or beat is None or part_id is None:
+            return jsonify({
+                'success': False,
+                'error': 'measure, beat, and part_id (or voice) are required'
             }), 400
         
         db = PiecesDB()
-        piece = db.get_piece_by_id(piece_id)
         
+        # Verify piece exists
+        piece = db.get_piece_by_id(piece_id)
         if not piece:
             return jsonify({
                 'success': False,
                 'error': 'Piece not found'
             }), 404
         
-        # Get file path
-        file_path = piece.get('path')
-        if not os.path.isabs(file_path):
-            base_path = os.path.join(os.path.dirname(__file__), '..', '..', 'data')
-            file_path = os.path.join(base_path, file_path)
+        # Search in both note sets
+        import sqlite3
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        db_path = os.path.join(project_root, 'database', 'analysis.db')
         
-        if not os.path.exists(file_path):
-            return jsonify({
-                'success': False,
-                'error': f'MusicXML file not found: {file_path}'
-            }), 404
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row  # This enables column access by name
+        cursor = conn.cursor()
         
-        # Use music21 to get note at specific position
-        target_note = Music21Analyzer.get_note_at_svg_index(file_path, svg_index)
+        results = {}
         
-        if not target_note:
-            return jsonify({
-                'success': False,
-                'error': f'SVG index {svg_index} out of range or invalid'
-            }), 400
+        # Search in note_set 1 (combine_unisons = True)
+        cursor.execute("""
+            SELECT * FROM notes 
+            WHERE piece_id = ? AND note_set_id = 1 AND voice = ? AND measure = ? 
+              AND ABS(beat - ?) <= ?
+            ORDER BY ABS(beat - ?) ASC
+            LIMIT 1
+        """, (piece_id, part_id, measure, beat, tolerance, beat))
         
-        # Find corresponding note in database using the existing NoteIdUpdater
-        sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'core', 'utils'))
-        from note_id_updater import NoteIdUpdater
+        row = cursor.fetchone()
+        if row:
+            results['note_set_1'] = dict(row)
+        else:
+            results['note_set_1'] = None
         
-        note_id_updater = NoteIdUpdater()
-        note_id = note_id_updater.find_note_id(
-            piece_id=piece_id,
-            voice=target_note['voice_id'],
-            onset=target_note['onset'],
-            tolerance=0.1  # More generous tolerance
-        )
+        # Search in note_set 2 (combine_unisons = False)  
+        cursor.execute("""
+            SELECT * FROM notes 
+            WHERE piece_id = ? AND note_set_id = 2 AND voice = ? AND measure = ? 
+              AND ABS(beat - ?) <= ?
+            ORDER BY ABS(beat - ?) ASC
+            LIMIT 1
+        """, (piece_id, part_id, measure, beat, tolerance, beat))
         
-        if note_id:
-            # Get full note details
-            note_details = db.get_note_by_id(note_id)
-            if note_details:
-                # Add music21 analysis data
-                note_details.update({
-                    'music21_onset': target_note['onset'],
-                    'music21_duration': target_note['duration'],
-                    'music21_measure': target_note.get('measure'),
-                    'music21_beat': target_note.get('beat'),
-                    'music21_pitch_name': target_note.get('pitch_name'),
-                    'svg_index': svg_index
-                })
-                
-                return jsonify({
-                    'success': True,
-                    'data': note_details
-                })
+        row = cursor.fetchone()
+        if row:
+            results['note_set_2'] = dict(row)
+        else:
+            results['note_set_2'] = None
+        
+        conn.close()
         
         return jsonify({
-            'success': False,
-            'error': f'Could not match SVG note {svg_index} with database',
-            'music21_data': target_note
-        }), 404
+            'success': True,
+            'database_matches': results,
+            'search_criteria': {
+                'piece_id': piece_id,
+                'measure': measure,
+                'beat': beat,
+                'part_id': part_id,
+                'voice': part_id,  # 保持兼容性
+                'tolerance': tolerance,
+                'search_type': 'osmd_position_based'
+            },
+            'osmd_analysis': {
+                'measure': measure,
+                'beat': beat,
+                'part_id': part_id,
+                'extraction_method': 'osmd_api'
+            }
+        })
     
     except Exception as e:
         import traceback
