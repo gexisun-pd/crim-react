@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SVG Structure Debug</title>
+    <script src="https://www.verovio.org/javascript/app/verovio-toolkit-wasm.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-info { 
+            background: #f5f5f5; 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-radius: 5px; 
+            font-family: monospace;
+        }
+        svg { border: 1px solid #ccc; margin: 10px 0; }
+        .highlight { stroke: red; stroke-width: 2; fill: yellow !important; }
+    </style>
+</head>
+<body>
+    <h1>Verovio SVG Structure Debug</h1>
+    
+    <div id="svg-container"></div>
+    <div id="debug-info"></div>
+    
+    <script>
+        const musicXML = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+        <!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+        <score-partwise version="3.1">
+          <part-list>
+            <score-part id="P1">
+              <part-name>Voice 1</part-name>
+            </score-part>
+            <score-part id="P2">
+              <part-name>Voice 2</part-name>
+            </score-part>
+          </part-list>
+          <part id="P1">
+            <measure number="1">
+              <attributes>
+                <divisions>4</divisions>
+                <key><fifths>0</fifths></key>
+                <time><beats>4</beats><beat-type>4</beat-type></time>
+                <clef><sign>G</sign><line>2</line></clef>
+              </attributes>
+              <note>
+                <pitch><step>C</step><octave>4</octave></pitch>
+                <duration>4</duration>
+                <type>quarter</type>
+              </note>
+              <note>
+                <pitch><step>D</step><octave>4</octave></pitch>
+                <duration>4</duration>
+                <type>quarter</type>
+              </note>
+              <note>
+                <pitch><step>E</step><octave>4</octave></pitch>
+                <duration>4</duration>
+                <type>quarter</type>
+              </note>
+              <note>
+                <pitch><step>F</step><octave>4</octave></pitch>
+                <duration>4</duration>
+                <type>quarter</type>
+              </note>
+            </measure>
+            <measure number="2">
+              <note>
+                <pitch><step>G</step><octave>4</octave></pitch>
+                <duration>8</duration>
+                <type>half</type>
+              </note>
+              <note>
+                <pitch><step>A</step><octave>4</octave></pitch>
+                <duration>8</duration>
+                <type>half</type>
+              </note>
+            </measure>
+          </part>
+          <part id="P2">
+            <measure number="1">
+              <attributes>
+                <divisions>4</divisions>
+                <key><fifths>0</fifths></key>
+                <time><beats>4</beats><beat-type>4</beat-type></time>
+                <clef><sign>F</sign><line>4</line></clef>
+              </attributes>
+              <note>
+                <pitch><step>C</step><octave>3</octave></pitch>
+                <duration>16</duration>
+                <type>whole</type>
+              </note>
+            </measure>
+            <measure number="2">
+              <note>
+                <pitch><step>G</step><octave>3</octave></pitch>
+                <duration>16</duration>
+                <type>whole</type>
+              </note>
+            </measure>
+          </part>
+        </score-partwise>`;
+
+        function initializeVerovio() {
+            const vrvToolkit = new verovio.toolkit();
+            
+            const options = {
+                inputFormat: 'musicxml',
+                adjustPageHeight: true,
+                pageHeight: 2000,
+                pageWidth: 2000,
+                scale: 40,
+                font: 'Leipzig'
+            };
+            
+            vrvToolkit.setOptions(options);
+            
+            if (vrvToolkit.loadData(musicXML)) {
+                const svg = vrvToolkit.renderToSVG(1, {});
+                document.getElementById('svg-container').innerHTML = svg;
+                
+                // 添加点击事件监听器
+                const svgElement = document.querySelector('svg');
+                if (svgElement) {
+                    addClickListener(svgElement);
+                    analyzeStructure(svgElement);
+                }
+            } else {
+                console.error('Error loading MusicXML data');
+            }
+        }
+        
+        function addClickListener(svgElement) {
+            svgElement.addEventListener('click', function(event) {
+                const target = event.target;
+                if (target && target.closest) {
+                    const noteElement = target.closest('use[class*="note"], g[class*="note"], use[href*="note"], g[id*="note"]');
+                    if (noteElement) {
+                        // 清除之前的高亮
+                        document.querySelectorAll('.highlight').forEach(el => {
+                            el.classList.remove('highlight');
+                        });
+                        
+                        // 高亮当前音符
+                        noteElement.classList.add('highlight');
+                        
+                        // 分析SVG结构
+                        const analysis = extractPositionFromSVG(noteElement);
+                        displayDebugInfo(noteElement, analysis);
+                    }
+                }
+            });
+        }
+        
+        function extractPositionFromSVG(noteElement) {
+            let measureNumber = 1;
+            let staffNumber = 1;
+            let layerNumber = 1;
+            
+            console.log('Analyzing element:', noteElement);
+            console.log('Element ID:', noteElement.getAttribute('id'));
+            console.log('Element Class:', noteElement.getAttribute('class'));
+            
+            // 分析父元素结构
+            let currentElement = noteElement;
+            const hierarchy = [];
+            
+            while (currentElement && currentElement.tagName !== 'svg') {
+                const elementInfo = {
+                    tagName: currentElement.tagName,
+                    id: currentElement.getAttribute('id'),
+                    class: currentElement.getAttribute('class'),
+                    role: currentElement.getAttribute('role')
+                };
+                hierarchy.push(elementInfo);
+                
+                // 检查measure信息
+                const id = elementInfo.id || '';
+                const className = elementInfo.class || '';
+                
+                // Verovio通常使用这些模式：
+                // - measure-L{layerNum}F{staffNum}N{noteNum}M{measureNum}
+                // - staff-{staffNum}
+                // - layer-{layerNum}
+                
+                if (id.includes('measure-') || className.includes('measure')) {
+                    const measureMatch = id.match(/[mM](\d+)/);
+                    if (measureMatch) {
+                        measureNumber = parseInt(measureMatch[1]);
+                    }
+                }
+                
+                if (id.includes('staff-') || className.includes('staff')) {
+                    const staffMatch = id.match(/staff-?(\d+)/);
+                    if (staffMatch) {
+                        staffNumber = parseInt(staffMatch[1]);
+                    }
+                    const staffMatchF = id.match(/[fF](\d+)/);
+                    if (staffMatchF) {
+                        staffNumber = parseInt(staffMatchF[1]);
+                    }
+                }
+                
+                if (id.includes('layer-') || className.includes('layer')) {
+                    const layerMatch = id.match(/layer-?(\d+)/);
+                    if (layerMatch) {
+                        layerNumber = parseInt(layerMatch[1]);
+                    }
+                    const layerMatchL = id.match(/[lL](\d+)/);
+                    if (layerMatchL) {
+                        layerNumber = parseInt(layerMatchL[1]);
+                    }
+                }
+                
+                currentElement = currentElement.parentElement;
+            }
+            
+            // 估算beat位置
+            let beat = 1.0;
+            const measureElement = noteElement.closest('[id*="measure-"], .measure');
+            if (measureElement) {
+                const measureRect = measureElement.getBoundingClientRect();
+                const noteRect = noteElement.getBoundingClientRect();
+                const relativeX = noteRect.left - measureRect.left;
+                const measureWidth = measureRect.width;
+                
+                if (measureWidth > 0) {
+                    // 基于相对位置估算beat
+                    const relativePosition = relativeX / measureWidth;
+                    beat = 1 + relativePosition * 4; // 假设4/4拍
+                    beat = Math.max(1, Math.round(beat * 4) / 4);
+                }
+            }
+            
+            return {
+                measure: measureNumber,
+                staff: staffNumber,
+                layer: layerNumber,
+                beat: beat,
+                hierarchy: hierarchy
+            };
+        }
+        
+        function displayDebugInfo(noteElement, analysis) {
+            const debugDiv = document.getElementById('debug-info');
+            debugDiv.innerHTML = `
+                <div class="debug-info">
+                    <h3>Clicked Note Analysis</h3>
+                    <p><strong>Element ID:</strong> ${noteElement.getAttribute('id') || 'none'}</p>
+                    <p><strong>Element Class:</strong> ${noteElement.getAttribute('class') || 'none'}</p>
+                    <p><strong>Tag Name:</strong> ${noteElement.tagName}</p>
+                    <p><strong>Extracted Measure:</strong> ${analysis.measure}</p>
+                    <p><strong>Extracted Staff:</strong> ${analysis.staff}</p>
+                    <p><strong>Extracted Layer:</strong> ${analysis.layer}</p>
+                    <p><strong>Estimated Beat:</strong> ${analysis.beat.toFixed(2)}</p>
+                    
+                    <h4>DOM Hierarchy:</h4>
+                    <pre>${JSON.stringify(analysis.hierarchy, null, 2)}</pre>
+                </div>
+            `;
+        }
+        
+        function analyzeStructure(svgElement) {
+            console.log('=== SVG Structure Analysis ===');
+            
+            // 查找所有音符元素
+            const noteElements = svgElement.querySelectorAll('use[class*="note"], g[class*="note"], use[href*="note"], g[id*="note"]');
+            console.log('Found note elements:', noteElements.length);
+            
+            // 查找所有measure元素
+            const measureElements = svgElement.querySelectorAll('[id*="measure-"], .measure');
+            console.log('Found measure elements:', measureElements.length);
+            measureElements.forEach((el, i) => {
+                console.log(`Measure ${i}:`, el.getAttribute('id'), el.getAttribute('class'));
+            });
+            
+            // 查找所有staff元素
+            const staffElements = svgElement.querySelectorAll('[id*="staff-"], .staff');
+            console.log('Found staff elements:', staffElements.length);
+            staffElements.forEach((el, i) => {
+                console.log(`Staff ${i}:`, el.getAttribute('id'), el.getAttribute('class'));
+            });
+            
+            // 查找所有layer元素
+            const layerElements = svgElement.querySelectorAll('[id*="layer-"], .layer');
+            console.log('Found layer elements:', layerElements.length);
+            layerElements.forEach((el, i) => {
+                console.log(`Layer ${i}:`, el.getAttribute('id'), el.getAttribute('class'));
+            });
+        }
+        
+        // 等待Verovio加载完成
+        if (typeof verovio !== 'undefined') {
+            verovio.module.onRuntimeInitialized = function() {
+                initializeVerovio();
+            }
+        } else {
+            // 如果verovio还没有加载，等待一下
+            setTimeout(() => {
+                if (typeof verovio !== 'undefined') {
+                    verovio.module.onRuntimeInitialized = function() {
+                        initializeVerovio();
+                    }
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verovio Methods Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        .results {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #ffc107;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .svg-container {
+            border: 2px solid #dee2e6;
+            border-radius: 5px;
+            overflow: auto;
+            max-height: 600px;
+            margin: 20px 0;
+        }
+        .note, .rest {
+            cursor: pointer !important;
+        }
+        .note:hover, .rest:hover {
+            opacity: 0.7 !important;
+            filter: drop-shadow(0 0 3px #007bff) !important;
+        }
+        .clicked-element {
+            filter: drop-shadow(0 0 5px #dc3545) !important;
+        }
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .method-section {
+            border: 1px solid #dee2e6;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .method-header {
+            background: #e9ecef;
+            padding: 10px;
+            margin: 0;
+            border-radius: 5px 5px 0 0;
+        }
+        .method-content {
+            padding: 15px;
+        }
+    </style>
+    <script src="https://www.verovio.org/javascript/develop/verovio-toolkit-wasm.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Verovio Methods Test for MusicXML</h1>
+        
+        <div class="controls">
+            <button onclick="loadSampleMusicXML()">Load Sample MusicXML</button>
+            <button onclick="loadMusicXMLFromAPI()">Load MusicXML from API</button>
+            <button onclick="generateTimemap()">Generate Timemap</button>
+            <button onclick="clearResults()">Clear Results</button>
+            <button onclick="showVerovioInfo()">Show Verovio Info</button>
+            <button onclick="testAllMethods()">Test All Methods</button>
+            <button onclick="initializeVerovio()">Reinitialize Verovio</button>
+        </div>
+
+        <div class="method-section">
+            <h3 class="method-header">Verovio Information</h3>
+            <div class="method-content">
+                <div id="verovio-info" class="results">Verovio not initialized yet</div>
+            </div>
+        </div>
+
+        <div class="method-section">
+            <h3 class="method-header">Click Results</h3>
+            <div class="method-content">
+                <div id="click-results" class="results">Click on a note to see results</div>
+            </div>
+        </div>
+
+        <div class="method-section">
+            <h3 class="method-header">Timemap Data</h3>
+            <div class="method-content">
+                <div id="timemap-data" class="results">Click "Generate Timemap" to see timemap data</div>
+            </div>
+        </div>
+
+        <div class="svg-container" id="svg-container">
+            <p style="padding: 20px; text-align: center; color: #6c757d;">MusicXML will be rendered here</p>
+        </div>
+
+        <div class="method-section">
+            <h3 class="method-header">MEI Data</h3>
+            <div class="method-content">
+                <div id="mei-data" class="results">MEI data will appear here after loading</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let verovio = null;
+        let currentMEI = '';
+
+        // 初始化 Verovio
+        async function initializeVerovio() {
+            try {
+                console.log('Initializing Verovio...');
+                
+                // 等待 Verovio 模块加载
+                let attempts = 0;
+                while (attempts < 50) { // 最多等待5秒
+                    if (typeof verovio_module !== 'undefined') {
+                        console.log('Found verovio_module, initializing...');
+                        verovio = new verovio_module.toolkit();
+                        break;
+                    } else if (typeof window.verovio !== 'undefined' && window.verovio.toolkit) {
+                        console.log('Found window.verovio, initializing...');
+                        verovio = new window.verovio.toolkit();
+                        break;
+                    } else if (typeof Module !== 'undefined' && Module.VerovioToolkit) {
+                        console.log('Found Module.VerovioToolkit, initializing...');
+                        verovio = new Module.VerovioToolkit();
+                        break;
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    attempts++;
+                }
+                
+                if (!verovio) {
+                    throw new Error('Verovio module not found after waiting. Available globals: ' + 
+                        Object.keys(window).filter(k => k.toLowerCase().includes('verovio')).join(', '));
+                }
+                
+                // 设置选项
+                verovio.setOptions({
+                    adjustPageHeight: true,
+                    pageHeight: 2970,
+                    pageWidth: 2100,
+                    scale: 40,
+                    font: 'Leipzig',
+                    header: 'none',
+                    footer: 'none',
+                    breaks: 'auto',
+                    xmlIdSeed: 1,
+                    removeIds: false,
+                    svgViewBox: true,
+                });
+                
+                showVerovioInfo();
+                console.log('Verovio initialized successfully');
+                return true;
+            } catch (error) {
+                console.error('Failed to initialize Verovio:', error);
+                document.getElementById('verovio-info').textContent = 'Failed to initialize Verovio: ' + error.message;
+                return false;
+            }
+        }
+
+        function generateTimemap() {
+            if (!verovio) {
+                alert('Please load MusicXML first');
+                return;
+            }
+
+            try {
+                console.log('Generating timemap...');
+                
+                // 尝试不同的 renderToTimemap 参数
+                let timemapResults = 'Timemap Generation Results:\n\n';
+                
+                // 方法1: 基本 timemap
+                try {
+                    const basicTimemap = verovio.renderToTimemap();
+                    timemapResults += `Method 1 - Basic renderToTimemap():\n`;
+                    if (basicTimemap) {
+                        const parsed = JSON.parse(basicTimemap);
+                        timemapResults += `  Found ${parsed.length || 0} entries\n`;
+                        if (parsed.length > 0) {
+                            timemapResults += `  First entry: ${JSON.stringify(parsed[0], null, 2)}\n`;
+                            if (parsed.length > 1) {
+                                timemapResults += `  Second entry: ${JSON.stringify(parsed[1], null, 2)}\n`;
+                            }
+                        }
+                    } else {
+                        timemapResults += `  No timemap data returned\n`;
+                    }
+                    timemapResults += '\n';
+                } catch (e) {
+                    timemapResults += `Method 1 - Basic renderToTimemap: FAILED (${e.message})\n\n`;
+                }
+
+                // 方法2: 带参数的 timemap
+                try {
+                    // 尝试传递选项参数
+                    const optionsTimemap = verovio.renderToTimemap({
+                        includeMeasures: true,
+                        includeRests: true
+                    });
+                    timemapResults += `Method 2 - renderToTimemap with options:\n`;
+                    if (optionsTimemap) {
+                        const parsed = JSON.parse(optionsTimemap);
+                        timemapResults += `  Found ${parsed.length || 0} entries\n`;
+                        if (parsed.length > 0) {
+                            timemapResults += `  First entry with options: ${JSON.stringify(parsed[0], null, 2)}\n`;
+                        }
+                    } else {
+                        timemapResults += `  No timemap data returned with options\n`;
+                    }
+                    timemapResults += '\n';
+                } catch (e) {
+                    timemapResults += `Method 2 - renderToTimemap with options: FAILED (${e.message})\n\n`;
+                }
+
+                // 方法3: 尝试特定页面的 timemap
+                try {
+                    const pageTimemap = verovio.renderToTimemap(1); // 第一页
+                    timemapResults += `Method 3 - renderToTimemap(1) for page 1:\n`;
+                    if (pageTimemap) {
+                        const parsed = JSON.parse(pageTimemap);
+                        timemapResults += `  Found ${parsed.length || 0} entries for page 1\n`;
+                        if (parsed.length > 0) {
+                            timemapResults += `  Sample entry: ${JSON.stringify(parsed[0], null, 2)}\n`;
+                        }
+                    } else {
+                        timemapResults += `  No timemap data returned for page 1\n`;
+                    }
+                    timemapResults += '\n';
+                } catch (e) {
+                    timemapResults += `Method 3 - renderToTimemap(1): FAILED (${e.message})\n\n`;
+                }
+
+                document.getElementById('timemap-data').textContent = timemapResults;
+                
+            } catch (error) {
+                console.error('Error generating timemap:', error);
+                document.getElementById('timemap-data').textContent = 'Error generating timemap: ' + error.message;
+            }
+        }
+
+        function showVerovioInfo() {
+            if (!verovio) {
+                document.getElementById('verovio-info').textContent = 'Verovio not initialized';
+                return;
+            }
+
+            let info = '';
+            
+            try {
+                const version = verovio.getVersion();
+                info += `Version: ${version}\n`;
+            } catch (e) {
+                info += `Version: Unable to get version (${e.message})\n`;
+            }
+
+            // 测试各种方法是否可用
+            const methodsToTest = [
+                'getVersion',
+                'getElementAttr', 
+                'getTimeForElement',
+                'getTimesForElement',
+                'getElementsAtTime',
+                'getMEI',
+                'getHumdrum',
+                'getElementIdForTime',
+                'getPageWithElement',
+                'getDescriptiveFeatures',
+                'renderToTimemap',
+                'renderToTimeMap',  // 可能的替代名称
+                'getTimemap'
+            ];
+
+            info += '\nAvailable methods:\n';
+            methodsToTest.forEach(method => {
+                if (typeof verovio[method] === 'function') {
+                    info += `✓ ${method}\n`;
+                } else {
+                    info += `✗ ${method}\n`;
+                }
+            });
+
+            document.getElementById('verovio-info').textContent = info;
+        }
+
+        async function loadMusicXMLFromAPI() {
+            if (!verovio) {
+                const initialized = await initializeVerovio();
+                if (!initialized) return;
+            }
+
+            try {
+                console.log('Loading MusicXML from API...');
+                const response = await fetch('http://localhost:5000/api/pieces/1/musicxml');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const musicXML = await response.text();
+                await processMusicXML(musicXML);
+                
+            } catch (error) {
+                console.error('Error loading MusicXML from API:', error);
+                document.getElementById('svg-container').innerHTML = 
+                    `<p style="color: red; padding: 20px;">Error loading MusicXML from API: ${error.message}<br>
+                    Try using the "Load Sample MusicXML" button instead.</p>`;
+            }
+        }
+
+        async function loadSampleMusicXML() {
+            if (!verovio) {
+                const initialized = await initializeVerovio();
+                if (!initialized) return;
+            }
+
+            // 使用一个简单的 MusicXML 示例
+            const sampleMusicXML = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1">
+      <part-name>Piano</part-name>
+    </score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>4</divisions>
+        <key>
+          <fifths>0</fifths>
+        </key>
+        <time>
+          <beats>4</beats>
+          <beat-type>4</beat-type>
+        </time>
+        <clef>
+          <sign>G</sign>
+          <line>2</line>
+        </clef>
+      </attributes>
+      <note>
+        <pitch>
+          <step>C</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch>
+          <step>E</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <type>quarter</type>
+      </note>
+      <note>
+        <pitch>
+          <step>F</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>4</duration>
+        <type>quarter</type>
+      </note>
+    </measure>
+    <measure number="2">
+      <note>
+        <pitch>
+          <step>G</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>8</duration>
+        <type>half</type>
+      </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>8</duration>
+        <type>half</type>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`;
+
+            await processMusicXML(sampleMusicXML);
+        }
+
+        async function processMusicXML(musicXML) {
+            try {
+                console.log('Processing MusicXML, size:', musicXML.length);
+                
+                // 加载数据到 Verovio
+                const success = verovio.loadData(musicXML);
+                if (!success) {
+                    throw new Error('Failed to parse MusicXML data');
+                }
+                
+                // 渲染为 SVG
+                const svg = verovio.renderToSVG(1);
+                document.getElementById('svg-container').innerHTML = svg;
+                
+                // 获取 MEI 数据
+                try {
+                    currentMEI = verovio.getMEI();
+                    document.getElementById('mei-data').textContent = 
+                        'MEI data loaded successfully (' + currentMEI.length + ' characters)\n' +
+                        'First 1000 characters:\n' + currentMEI.substring(0, 1000) + '...';
+                } catch (meiError) {
+                    document.getElementById('mei-data').textContent = 'Failed to get MEI: ' + meiError.message;
+                }
+                
+                // 添加点击监听器
+                addClickListeners();
+                
+                console.log('MusicXML processed successfully');
+                
+            } catch (error) {
+                console.error('Error processing MusicXML:', error);
+                document.getElementById('svg-container').innerHTML = 
+                    `<p style="color: red; padding: 20px;">Error processing MusicXML: ${error.message}</p>`;
+            }
+        }
+
+        async function loadMusicXML() {
+            // 保持向后兼容，默认调用 API 版本
+            await loadMusicXMLFromAPI();
+        }
+
+        function addClickListeners() {
+            const clickableElements = document.querySelectorAll('.note, .rest');
+            console.log(`Added click listeners to ${clickableElements.length} elements`);
+            
+            clickableElements.forEach(element => {
+                element.style.cursor = 'pointer';
+                element.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                    handleElementClick(element);
+                });
+            });
+        }
+
+        function handleElementClick(element) {
+            // 清除之前的高亮
+            document.querySelectorAll('.clicked-element').forEach(el => {
+                el.classList.remove('clicked-element');
+            });
+            
+            // 高亮当前元素
+            element.classList.add('clicked-element');
+            
+            // 测试各种方法
+            testElementMethods(element);
+        }
+
+        function testElementMethods(element) {
+            const svg_id = element.getAttribute('id') || '';
+            let results = `Testing element with ID: ${svg_id}\n`;
+            results += `Element class: ${element.getAttribute('class') || 'N/A'}\n`;
+            results += `Element tag: ${element.tagName}\n\n`;
+
+            if (!svg_id) {
+                results += 'ERROR: No SVG ID found!\n';
+                document.getElementById('click-results').textContent = results;
+                return;
+            }
+
+            // 方法1: getTimesForElement - 获取元素的时间信息
+            try {
+                results += `Method 1 - getTimesForElement (recommended):\n`;
+                const timesData = verovio.getTimesForElement(svg_id);
+                results += `  Raw result: ${JSON.stringify(timesData)}\n`;
+                
+                if (timesData && Array.isArray(timesData) && timesData.length > 0) {
+                    const timeInfo = timesData[0]; // 通常第一个元素包含主要信息
+                    results += `  Score time onset: ${timeInfo.scoreTimeOnset || 'N/A'}\n`;
+                    results += `  Score time offset: ${timeInfo.scoreTimeOffset || 'N/A'}\n`;
+                    results += `  Real time onset (ms): ${timeInfo.realTimeOnsetMilliseconds || 'N/A'}\n`;
+                    results += `  Real time offset (ms): ${timeInfo.realTimeOffsetMilliseconds || 'N/A'}\n`;
+                    
+                    // 如果有 scoreTimeOnset，尝试计算 measure 和 beat
+                    if (timeInfo.scoreTimeOnset !== undefined) {
+                        // 假设 4/4 拍子，每个四分音符 = 1 单位
+                        const beatsPerMeasure = 4;
+                        const totalBeats = timeInfo.scoreTimeOnset;
+                        const measure = Math.floor(totalBeats / beatsPerMeasure) + 1;
+                        const beatInMeasure = (totalBeats % beatsPerMeasure) + 1;
+                        
+                        results += `  Calculated measure: ${measure}\n`;
+                        results += `  Calculated beat in measure: ${beatInMeasure.toFixed(3)}\n`;
+                    }
+                } else {
+                    results += `  No valid time data returned\n`;
+                }
+                results += '\n';
+            } catch (e) {
+                results += `Method 1 - getTimesForElement: FAILED (${e.message})\n\n`;
+            }
+
+            // 方法2: getTimeForElement - 简单时间获取
+            try {
+                results += `Method 2 - getTimeForElement:\n`;
+                const timeValue = verovio.getTimeForElement(svg_id);
+                results += `  Time value: ${timeValue}\n`;
+                
+                if (timeValue !== undefined && timeValue !== null && timeValue >= 0) {
+                    // 尝试不同的时间单位假设
+                    const assumptions = [
+                        { name: "Quarter notes", divisor: 1 },
+                        { name: "Divisions (768 per quarter)", divisor: 768 },
+                        { name: "Milliseconds (assuming 120 BPM)", divisor: 500 }
+                    ];
+                    
+                    assumptions.forEach(assumption => {
+                        const beatsPerMeasure = 4;
+                        const totalBeats = timeValue / assumption.divisor;
+                        const measure = Math.floor(totalBeats / beatsPerMeasure) + 1;
+                        const beat = (totalBeats % beatsPerMeasure) + 1;
+                        
+                        results += `  ${assumption.name}: measure=${measure}, beat=${beat.toFixed(3)}\n`;
+                    });
+                }
+                results += '\n';
+            } catch (e) {
+                results += `Method 2 - getTimeForElement: FAILED (${e.message})\n\n`;
+            }
+
+            // 方法3: getPageWithElement - 获取页码
+            try {
+                results += `Method 3 - getPageWithElement:\n`;
+                const pageNumber = verovio.getPageWithElement(svg_id);
+                results += `  Page number: ${pageNumber}\n\n`;
+            } catch (e) {
+                results += `Method 3 - getPageWithElement: FAILED (${e.message})\n\n`;
+            }
+
+            // 方法4: getElementAttr - 获取属性 (修复对象处理)
+            try {
+                results += `Method 4 - getElementAttr (Fixed):\n`;
+                const attrs = ['xml:id', 'measure', 'beat', 'tstamp', 'layer', 'staff', 'n', 'pname', 'oct'];
+                
+                attrs.forEach(attr => {
+                    try {
+                        const value = verovio.getElementAttr(svg_id, attr);
+                        // 如果返回的是对象，尝试转换为字符串或提取值
+                        let displayValue;
+                        if (typeof value === 'object' && value !== null) {
+                            // 尝试不同的属性来获取实际值
+                            displayValue = value.value || value.nodeValue || value.textContent || JSON.stringify(value);
+                        } else {
+                            displayValue = value;
+                        }
+                        results += `  ${attr}: ${displayValue || 'null'}\n`;
+                    } catch (e) {
+                        results += `  ${attr}: ERROR (${e.message})\n`;
+                    }
+                });
+                results += '\n';
+            } catch (e) {
+                results += `Method 4 - getElementAttr: FAILED (${e.message})\n\n`;
+            }
+
+            // 方法5: MEI 解析 - 深度分析beat信息
+            try {
+                results += `Method 5 - MEI Deep Analysis for Beat:\n`;
+                if (currentMEI) {
+                    const parser = new DOMParser();
+                    const meiDoc = parser.parseFromString(currentMEI, 'text/xml');
+                    
+                    // 查找元素
+                    let meiElement = meiDoc.querySelector(`[*|id="${svg_id}"]`) || 
+                                   meiDoc.querySelector(`[id="${svg_id}"]`) ||
+                                   meiDoc.querySelector(`[xml\\:id="${svg_id}"]`);
+                    
+                    if (meiElement) {
+                        results += `  Found MEI element: ${meiElement.tagName}\n`;
+                        
+                        // 显示所有属性
+                        results += `  All attributes:\n`;
+                        for (let attr of meiElement.attributes) {
+                            results += `    ${attr.name}: ${attr.value}\n`;
+                        }
+                        
+                        // 查找beat信息的多种方式
+                        results += `\n  Beat Analysis:\n`;
+                        
+                        // 方式1: 直接的tstamp属性
+                        const directTstamp = meiElement.getAttribute('tstamp');
+                        results += `    Direct tstamp: ${directTstamp || 'N/A'}\n`;
+                        
+                        // 方式2: 检查父级元素的tstamp
+                        let parent = meiElement.parentElement;
+                        while (parent && parent.tagName !== 'measure') {
+                            const parentTstamp = parent.getAttribute('tstamp');
+                            if (parentTstamp) {
+                                results += `    Parent ${parent.tagName} tstamp: ${parentTstamp}\n`;
+                            }
+                            parent = parent.parentElement;
+                        }
+                        
+                        // 方式3: 分析在measure中的位置
+                        const measureElement = meiElement.closest('measure');
+                        if (measureElement) {
+                            results += `    \n  Measure Analysis:\n`;
+                            results += `    Measure @n: ${measureElement.getAttribute('n')}\n`;
+                            
+                            // 获取measure中的所有音符
+                            const notesInMeasure = measureElement.querySelectorAll('note');
+                            results += `    Total notes in measure: ${notesInMeasure.length}\n`;
+                            
+                            // 找到当前音符在measure中的位置
+                            let noteIndex = -1;
+                            for (let i = 0; i < notesInMeasure.length; i++) {
+                                const noteId = notesInMeasure[i].getAttribute('xml:id') || 
+                                             notesInMeasure[i].getAttribute('id');
+                                if (noteId === svg_id) {
+                                    noteIndex = i;
+                                    break;
+                                }
+                            }
+                            
+                            results += `    Note index in measure: ${noteIndex}\n`;
+                            
+                            // 分析每个音符的duration和位置
+                            results += `    \n  All notes in measure:\n`;
+                            let cumulativeDuration = 0;
+                            for (let i = 0; i < notesInMeasure.length; i++) {
+                                const note = notesInMeasure[i];
+                                const noteId = note.getAttribute('xml:id') || note.getAttribute('id');
+                                const dur = note.getAttribute('dur');
+                                const durPpq = note.getAttribute('dur.ppq');
+                                const tstamp = note.getAttribute('tstamp');
+                                
+                                results += `      Note ${i}: id=${noteId}, dur=${dur}, dur.ppq=${durPpq}, tstamp=${tstamp}\n`;
+                                
+                                if (i === noteIndex) {
+                                    results += `        >>> THIS IS OUR NOTE <<<\n`;
+                                    
+                                    // 尝试计算beat位置
+                                    if (tstamp) {
+                                        results += `        Beat from tstamp: ${tstamp}\n`;
+                                    } else {
+                                        // 根据累积duration计算
+                                        const beat = 1 + (cumulativeDuration / 4); // 假设dur.ppq=4是四分音符
+                                        results += `        Calculated beat: ${beat} (cumulative dur: ${cumulativeDuration})\n`;
+                                    }
+                                }
+                                
+                                // 累加duration
+                                if (durPpq) {
+                                    cumulativeDuration += parseInt(durPpq);
+                                } else if (dur) {
+                                    // 根据dur值计算duration
+                                    const durMap = { '1': 16, '2': 8, '4': 4, '8': 2, '16': 1 };
+                                    cumulativeDuration += durMap[dur] || 4;
+                                }
+                            }
+                            
+                            // 检查拍号信息
+                            results += `    \n  Time Signature Analysis:\n`;
+                            const scoreDef = meiDoc.querySelector('scoreDef');
+                            if (scoreDef) {
+                                const beats = scoreDef.getAttribute('meter.count');
+                                const beatType = scoreDef.getAttribute('meter.unit');
+                                const ppq = scoreDef.getAttribute('ppq');
+                                results += `    Meter: ${beats || 'N/A'}/${beatType || 'N/A'}\n`;
+                                results += `    PPQ (pulses per quarter): ${ppq || 'N/A'}\n`;
+                            }
+                            
+                            // 查找staffDef信息
+                            const staffDef = meiDoc.querySelector('staffDef');
+                            if (staffDef) {
+                                const staffPpq = staffDef.getAttribute('ppq');
+                                const staffMeter = `${staffDef.getAttribute('meter.count')}/${staffDef.getAttribute('meter.unit')}`;
+                                results += `    StaffDef meter: ${staffMeter}\n`;
+                                results += `    StaffDef PPQ: ${staffPpq || 'N/A'}\n`;
+                            }
+                        }
+                        
+                        // 方式4: 查找layer中的信息
+                        const layerElement = meiElement.closest('layer');
+                        if (layerElement) {
+                            results += `    \n  Layer Analysis:\n`;
+                            results += `    Layer @n: ${layerElement.getAttribute('n')}\n`;
+                            
+                            // 检查layer中是否有时间信息
+                            const layerAttrs = ['tstamp', 'tstamp2', 'startid', 'endid'];
+                            layerAttrs.forEach(attr => {
+                                const value = layerElement.getAttribute(attr);
+                                if (value) {
+                                    results += `    Layer ${attr}: ${value}\n`;
+                                }
+                            });
+                        }
+                        
+                    } else {
+                        results += `  MEI element not found with ID: ${svg_id}\n`;
+                    }
+                } else {
+                    results += `  No MEI data available\n`;
+                }
+                results += '\n';
+            } catch (e) {
+                results += `Method 5 - MEI Analysis: FAILED (${e.message})\n\n`;
+            }
+
+            document.getElementById('click-results').textContent = results;
+        }
+
+        function testAllMethods() {
+            if (!verovio) {
+                alert('Please load MusicXML first');
+                return;
+            }
+
+            let results = 'Testing all available methods:\n\n';
+
+            // 测试不需要参数的方法
+            const noParamMethods = ['getVersion', 'getMEI', 'getHumdrum'];
+            
+            noParamMethods.forEach(method => {
+                if (typeof verovio[method] === 'function') {
+                    try {
+                        const result = verovio[method]();
+                        results += `${method}(): `;
+                        if (typeof result === 'string' && result.length > 100) {
+                            results += `String (${result.length} chars)\n`;
+                        } else {
+                            results += `${JSON.stringify(result)}\n`;
+                        }
+                    } catch (e) {
+                        results += `${method}(): ERROR - ${e.message}\n`;
+                    }
+                } else {
+                    results += `${method}: Not available\n`;
+                }
+            });
+
+            document.getElementById('click-results').textContent = results;
+        }
+
+        function clearResults() {
+            document.getElementById('click-results').textContent = 'Click on a note to see results';
+            document.querySelectorAll('.clicked-element').forEach(el => {
+                el.classList.remove('clicked-element');
+            });
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', async () => {
+            console.log('Page loaded, waiting for Verovio...');
+            document.getElementById('verovio-info').textContent = 'Loading Verovio toolkit...';
+            
+            // 等待更长时间让 WASM 模块加载
+            setTimeout(async () => {
+                console.log('Available globals:', Object.keys(window).filter(k => k.toLowerCase().includes('ver')));
+                await initializeVerovio();
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

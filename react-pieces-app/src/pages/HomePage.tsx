@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import PieceSelector from '../components/PieceSelector';
-import ScoreViewer from '../components/ScoreViewer';
+import SimpleOSMD from '../components/SimpleOSMD';
 import { Piece } from '../types';
 
 const HomePage: React.FC = () => {
@@ -36,10 +36,9 @@ const HomePage: React.FC = () => {
         </div>
 
         {/* Score Viewer */}
-        <ScoreViewer 
+        <SimpleOSMD 
           piece={selectedPiece} 
           onNoteClick={handleNoteClick}
-          className="min-h-[600px]"
         />
 
         {/* Selected Note Details */}

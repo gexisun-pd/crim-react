@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenSheetMusicDisplay Test</title>
+    <script src="https://unpkg.com/opensheetmusicdisplay@1.8.5/build/opensheetmusicdisplay.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .score-container {
+            border: 1px solid #ddd;
+            margin: 20px 0;
+            min-height: 400px;
+            padding: 10px;
+            background: white;
+        }
+        .controls {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .info-panel {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 5px;
+        }
+        .note-info {
+            margin: 10px 0;
+            padding: 10px;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+        }
+        select {
+            padding: 5px 10px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OpenSheetMusicDisplay Test</h1>
+        <p>Testing OSMD measure and beat extraction capabilities</p>
+        
+        <div class="controls">
+            <label for="pieceSelect">Select Test Piece:</label>
+            <select id="pieceSelect">
+                <option value="1">Gabrieli - Inclina Domine</option>
+                <option value="2">Gabrieli - Ego dixi</option>
+                <option value="3">Gabrieli - O magnum mysterium</option>
+            </select>
+            <button onclick="loadSelectedPiece()">Load Piece</button>
+            <button onclick="analyzeScore()">Analyze Score Structure</button>
+            <button onclick="testNoteExtraction()">Test Note Extraction</button>
+        </div>
+        
+        <div class="info-panel">
+            <h3>OSMD Information</h3>
+            <div id="osmdInfo">Click "Load Piece" to start</div>
+        </div>
+        
+        <div class="score-container" id="scoreContainer">
+            <!-- OSMD will render here -->
+        </div>
+        
+        <div class="note-info" id="noteInfo" style="display: none;">
+            <h4>Clicked Note Information</h4>
+            <div id="noteDetails"></div>
+        </div>
+    </div>
+
+    <script>
+        let osmd = null;
+        let currentPieceId = null;
+
+        // Initialize OSMD
+        function initializeOSMD() {
+            try {
+                const container = document.getElementById('scoreContainer');
+                osmd = new OSMD.OpenSheetMusicDisplay(container, {
+                    autoResize: true,
+                    backend: 'svg',
+                    drawTitle: true,
+                    drawComposer: true,
+                    drawPartNames: true,
+                    drawMeasureNumbers: true,
+                    measureNumberInterval: 1,
+                    drawTimeSignatures: true,
+                    drawKeySignatures: true,
+                    defaultFontFamily: 'TimesNewRoman',
+                    defaultFontSize: 40,
+                    pageFormat: 'Endless',
+                    pageBackgroundColor: '#FFFFFF',
+                    renderSingleHorizontalStaffline: false
+                });
+                
+                updateInfo('OSMD initialized successfully');
+                console.log('OSMD initialized:', osmd);
+                return true;
+            } catch (error) {
+                updateInfo('Failed to initialize OSMD: ' + error.message);
+                console.error('OSMD initialization error:', error);
+                return false;
+            }
+        }
+
+        // Load selected piece
+        async function loadSelectedPiece() {
+            const select = document.getElementById('pieceSelect');
+            const pieceId = select.value;
+            currentPieceId = pieceId;
+            
+            if (!osmd && !initializeOSMD()) {
+                return;
+            }
+            
+            try {
+                updateInfo('Loading piece...');
+                
+                // Fetch MusicXML from Flask API
+                const response = await fetch(`http://localhost:5000/api/pieces/${pieceId}/musicxml`);
+                if (!response.ok) {
+                    throw new Error(`Failed to load piece: ${response.status}`);
+                }
+                
+                const musicXML = await response.text();
+                console.log('Loaded MusicXML length:', musicXML.length);
+                
+                // Load and render with OSMD
+                await osmd.load(musicXML);
+                await osmd.render();
+                
+                updateInfo('Piece loaded and rendered successfully!');
+                
+                // Analyze the loaded score
+                analyzeScore();
+                
+                // Add click listeners to notes
+                addNoteClickListeners();
+                
+            } catch (error) {
+                updateInfo('Error loading piece: ' + error.message);
+                console.error('Load error:', error);
+            }
+        }
+
+        // Analyze score structure
+        function analyzeScore() {
+            if (!osmd || !osmd.Sheet) {
+                updateInfo('No score loaded');
+                return;
+            }
+            
+            try {
+                const sheet = osmd.Sheet;
+                console.log('Full sheet object:', sheet);
+                
+                let analysis = '<h4>Score Analysis:</h4>';
+                
+                // Basic info
+                analysis += `<p><strong>Title:</strong> ${sheet.Title || 'N/A'}</p>`;
+                analysis += `<p><strong>Composer:</strong> ${sheet.Composer || 'N/A'}</p>`;
+                
+                // Instruments
+                if (sheet.Instruments) {
+                    analysis += `<p><strong>Instruments:</strong> ${sheet.Instruments.length}</p>`;
+                    sheet.Instruments.forEach((instrument, index) => {
+                        analysis += `<p>&nbsp;&nbsp;${index + 1}. ${instrument.Name || 'Unnamed'} (${instrument.Voices?.length || 0} voices)</p>`;
+                    });
+                }
+                
+                // Measures
+                const measures = sheet.SourceMeasures;
+                analysis += `<p><strong>Total Measures:</strong> ${measures.length}</p>`;
+                
+                if (measures.length > 0) {
+                    const firstMeasure = measures[0];
+                    analysis += `<p><strong>First Measure Info:</strong></p>`;
+                    analysis += `<p>&nbsp;&nbsp;Number: ${firstMeasure.MeasureNumber}</p>`;
+                    
+                    if (firstMeasure.ActiveTimeSignature) {
+                        analysis += `<p>&nbsp;&nbsp;Time Signature: ${firstMeasure.ActiveTimeSignature.ToString()}</p>`;
+                    }
+                    
+                    if (firstMeasure.ActiveKeyInstruction) {
+                        analysis += `<p>&nbsp;&nbsp;Key: ${firstMeasure.ActiveKeyInstruction.Key}</p>`;
+                    }
+                }
+                
+                // Graphical info
+                if (osmd.GraphicSheet && osmd.GraphicSheet.MusicPages) {
+                    const pages = osmd.GraphicSheet.MusicPages;
+                    analysis += `<p><strong>Graphical Pages:</strong> ${pages.length}</p>`;
+                    
+                    if (pages[0]) {
+                        const systems = pages[0].MusicSystems;
+                        analysis += `<p><strong>Music Systems:</strong> ${systems.length}</p>`;
+                        
+                        if (systems[0]) {
+                            const staffLines = systems[0].StaffLines;
+                            analysis += `<p><strong>Staff Lines in first system:</strong> ${staffLines.length}</p>`;
+                        }
+                    }
+                }
+                
+                updateInfo(analysis);
+                
+            } catch (error) {
+                updateInfo('Error analyzing score: ' + error.message);
+                console.error('Analysis error:', error);
+            }
+        }
+
+        // Test note extraction from a sample element
+        function testNoteExtraction() {
+            if (!osmd || !osmd.GraphicSheet) {
+                updateInfo('No rendered score available');
+                return;
+            }
+            
+            try {
+                // Find some note elements in the SVG
+                const svg = document.querySelector('#scoreContainer svg');
+                if (!svg) {
+                    updateInfo('No SVG found in score container');
+                    return;
+                }
+                
+                // Look for various note-related elements
+                const noteElements = svg.querySelectorAll('[id*="note"], [id*="vf-"], [class*="note"]');
+                console.log('Found note elements:', noteElements);
+                
+                if (noteElements.length === 0) {
+                    updateInfo('No note elements found in SVG');
+                    return;
+                }
+                
+                let testInfo = `<h4>Note Extraction Test:</h4>`;
+                testInfo += `<p>Found ${noteElements.length} potential note elements</p>`;
+                
+                // Test first few elements
+                for (let i = 0; i < Math.min(5, noteElements.length); i++) {
+                    const element = noteElements[i];
+                    const id = element.getAttribute('id') || 'no-id';
+                    const className = element.getAttribute('class') || 'no-class';
+                    
+                    testInfo += `<p><strong>Element ${i + 1}:</strong></p>`;
+                    testInfo += `<p>&nbsp;&nbsp;ID: ${id}</p>`;
+                    testInfo += `<p>&nbsp;&nbsp;Class: ${className}</p>`;
+                    
+                    // Try to extract position
+                    const position = extractNotePosition(element);
+                    if (position) {
+                        testInfo += `<p>&nbsp;&nbsp;Position: Measure ${position.measure}, Beat ${position.beat}, Voice ${position.voice}</p>`;
+                    } else {
+                        testInfo += `<p>&nbsp;&nbsp;Position: Could not extract</p>`;
+                    }
+                }
+                
+                updateInfo(testInfo);
+                
+            } catch (error) {
+                updateInfo('Error testing note extraction: ' + error.message);
+                console.error('Test error:', error);
+            }
+        }
+
+        // Extract note position (similar to React component)
+        function extractNotePosition(noteElement) {
+            try {
+                const elementId = noteElement.getAttribute('id') || '';
+                console.log('Extracting position from element:', elementId);
+                
+                if (!osmd || !osmd.Sheet) {
+                    console.error('OSMD or Sheet not available');
+                    return null;
+                }
+                
+                // Try to find the note in OSMD's internal structure
+                const graphicalMusicPage = osmd.GraphicSheet?.MusicPages?.[0];
+                if (!graphicalMusicPage) {
+                    console.error('No graphical music page found');
+                    return fallbackPositionExtraction(noteElement);
+                }
+                
+                // Search through the musical structure
+                for (const system of graphicalMusicPage.MusicSystems) {
+                    for (let staffIndex = 0; staffIndex < system.StaffLines.length; staffIndex++) {
+                        const staff = system.StaffLines[staffIndex];
+                        
+                        for (let measureIndex = 0; measureIndex < staff.Measures.length; measureIndex++) {
+                            const measure = staff.Measures[measureIndex];
+                            const measureNumber = measure.MeasureNumber;
+                            
+                            // Check all staff entries in this measure
+                            for (let voiceIndex = 0; voiceIndex < measure.staffEntries.length; voiceIndex++) {
+                                const staffEntry = measure.staffEntries[voiceIndex];
+                                
+                                for (const voiceEntry of staffEntry.VoiceEntries) {
+                                    // Check if this voice entry corresponds to our clicked element
+                                    if (voiceEntry.notes && voiceEntry.notes.length > 0) {
+                                        for (const note of voiceEntry.notes) {
+                                            // Try to match the SVG element
+                                            const graphicalNote = note.GraphicalNoteReference;
+                                            if (graphicalNote && (
+                                                graphicalNote.SVGElement === noteElement ||
+                                                graphicalNote.SVGElement?.getAttribute('id') === elementId
+                                            )) {
+                                                // Found a match!
+                                                const timeStamp = voiceEntry.Timestamp;
+                                                const beat = timeStamp.RealValue * 4 + 1; // Convert to 1-based beat
+                                                
+                                                return {
+                                                    measure: measureNumber,
+                                                    beat: Math.round(beat * 100) / 100,
+                                                    voice: voiceIndex + 1,
+                                                    staff: staffIndex + 1,
+                                                    pitch: note.Pitch?.ToString(),
+                                                    element_id: elementId,
+                                                    timestamp: timeStamp.RealValue
+                                                };
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // If no direct match found, use fallback method
+                return fallbackPositionExtraction(noteElement);
+                
+            } catch (error) {
+                console.error('Error extracting note position:', error);
+                return fallbackPositionExtraction(noteElement);
+            }
+        }
+
+        // Fallback position extraction based on DOM structure and positioning
+        function fallbackPositionExtraction(noteElement) {
+            try {
+                const elementId = noteElement.getAttribute('id') || '';
+                
+                // Method 1: Parse ID for position information
+                const measureMatch = elementId.match(/[mM](\d+)/);
+                const voiceMatch = elementId.match(/[vV](\d+)/);
+                const beatMatch = elementId.match(/[bB]([\d.]+)/);
+                
+                if (measureMatch) {
+                    return {
+                        measure: parseInt(measureMatch[1]),
+                        beat: beatMatch ? parseFloat(beatMatch[1]) : 1.0,
+                        voice: voiceMatch ? parseInt(voiceMatch[1]) : 1,
+                        element_id: elementId,
+                        extraction_method: 'id_parsing'
+                    };
+                }
+                
+                // Method 2: Estimate based on visual position
+                const svg = document.querySelector('#scoreContainer svg');
+                if (svg) {
+                    const allElements = Array.from(svg.querySelectorAll('[id*="note"], [id*="vf-"]'));
+                    const elementIndex = allElements.indexOf(noteElement);
+                    
+                    if (elementIndex >= 0) {
+                        // Rough estimation: 4 notes per measure, 1 voice
+                        const estimatedMeasure = Math.floor(elementIndex / 4) + 1;
+                        const estimatedBeat = (elementIndex % 4) + 1;
+                        
+                        return {
+                            measure: estimatedMeasure,
+                            beat: estimatedBeat,
+                            voice: 1,
+                            element_id: elementId,
+                            extraction_method: 'position_estimation',
+                            element_index: elementIndex
+                        };
+                    }
+                }
+                
+                // Default fallback
+                return {
+                    measure: 1,
+                    beat: 1.0,
+                    voice: 1,
+                    element_id: elementId,
+                    extraction_method: 'default_fallback'
+                };
+                
+            } catch (error) {
+                console.error('Fallback extraction error:', error);
+                return null;
+            }
+        }
+
+        // Add click listeners to note elements
+        function addNoteClickListeners() {
+            const svg = document.querySelector('#scoreContainer svg');
+            if (!svg) return;
+            
+            // Remove existing listeners
+            svg.removeEventListener('click', handleNoteClick);
+            
+            // Add new listener
+            svg.addEventListener('click', handleNoteClick);
+            
+            // Style clickable elements
+            const noteElements = svg.querySelectorAll('[id*="note"], [id*="vf-"], [class*="note"]');
+            noteElements.forEach(el => {
+                el.style.cursor = 'pointer';
+                el.addEventListener('mouseenter', () => {
+                    el.style.opacity = '0.7';
+                });
+                el.addEventListener('mouseleave', () => {
+                    if (!el.classList.contains('selected-note')) {
+                        el.style.opacity = '1';
+                    }
+                });
+            });
+        }
+
+        // Handle note clicks
+        function handleNoteClick(event) {
+            const target = event.target;
+            
+            // Find clicked note element
+            const noteElement = target.closest('[id*="note"], [id*="vf-"], [class*="note"]');
+            
+            if (noteElement) {
+                console.log('Clicked note element:', noteElement);
+                
+                // Clear previous selections
+                document.querySelectorAll('.selected-note').forEach(el => {
+                    el.classList.remove('selected-note');
+                    el.style.opacity = '1';
+                    el.style.fill = '';
+                });
+                
+                // Highlight selected note
+                noteElement.classList.add('selected-note');
+                noteElement.style.opacity = '1';
+                noteElement.style.fill = '#ff6b6b';
+                
+                // Extract position information
+                const position = extractNotePosition(noteElement);
+                
+                // Display note information
+                displayNoteInfo(noteElement, position);
+            }
+        }
+
+        // Display note information
+        function displayNoteInfo(element, position) {
+            const noteInfoDiv = document.getElementById('noteInfo');
+            const noteDetailsDiv = document.getElementById('noteDetails');
+            
+            let details = '<h5>Element Details:</h5>';
+            details += `<p><strong>ID:</strong> ${element.getAttribute('id') || 'N/A'}</p>`;
+            details += `<p><strong>Class:</strong> ${element.getAttribute('class') || 'N/A'}</p>`;
+            details += `<p><strong>Tag:</strong> ${element.tagName}</p>`;
+            
+            if (position) {
+                details += '<h5>Position Information:</h5>';
+                details += `<p><strong>Measure:</strong> ${position.measure}</p>`;
+                details += `<p><strong>Beat:</strong> ${position.beat}</p>`;
+                details += `<p><strong>Voice:</strong> ${position.voice}</p>`;
+                if (position.staff) details += `<p><strong>Staff:</strong> ${position.staff}</p>`;
+                if (position.pitch) details += `<p><strong>Pitch:</strong> ${position.pitch}</p>`;
+                if (position.timestamp !== undefined) details += `<p><strong>Timestamp:</strong> ${position.timestamp}</p>`;
+                if (position.extraction_method) details += `<p><strong>Method:</strong> ${position.extraction_method}</p>`;
+                if (position.element_index !== undefined) details += `<p><strong>Element Index:</strong> ${position.element_index}</p>`;
+            } else {
+                details += '<p><strong>Position:</strong> Could not extract position information</p>';
+            }
+            
+            noteDetailsDiv.innerHTML = details;
+            noteInfoDiv.style.display = 'block';
+        }
+
+        // Update info panel
+        function updateInfo(message) {
+            document.getElementById('osmdInfo').innerHTML = message;
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', () => {
+            initializeOSMD();
+        });
+    </script>
+</body>
+</html>
