@@ -584,3 +584,227 @@ def search_notes_by_osmd_data(piece_id):
             'success': False,
             'error': str(e)
         }), 500
+
+@pieces_bp.route('/notes/<int:note_id>/melodic-ngrams', methods=['GET'])
+def get_melodic_ngrams_by_note_id(note_id):
+    """Get melodic ngrams that start from a specific note_id"""
+    try:
+        db = PiecesDB()
+        
+        # First verify the note exists
+        note = db.get_note_by_id(note_id)
+        if not note:
+            return jsonify({
+                'success': False,
+                'error': 'Note not found'
+            }), 404
+        
+        # Search for melodic ngrams starting from this note
+        import sqlite3
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        db_path = os.path.join(project_root, 'database', 'analysis.db')
+        
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Get melodic ngrams with set information
+        cursor.execute("""
+            SELECT 
+                mn.ngram_id,
+                mn.piece_id,
+                mn.melodic_ngram_set_id,
+                mn.note_id,
+                mn.voice,
+                mn.voice_name,
+                mn.onset,
+                mn.ngram,
+                mn.ngram_length,
+                mns.slug as ngram_set_slug,
+                mns.description as ngram_set_description,
+                mns.ngrams_number,
+                mis.kind as interval_kind,
+                ns.combine_unisons,
+                ns.slug as note_set_slug
+            FROM melodic_ngrams mn
+            JOIN melodic_ngram_sets mns ON mn.melodic_ngram_set_id = mns.set_id
+            JOIN melodic_interval_sets mis ON mns.melodic_interval_set_id = mis.set_id
+            JOIN note_sets ns ON mis.note_set_id = ns.set_id
+            WHERE mn.note_id = ?
+            ORDER BY mns.set_id, mn.onset
+        """, (note_id,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # Group results by melodic ngram set
+        ngrams_by_set = {}
+        for row in rows:
+            set_id = row['melodic_ngram_set_id']
+            if set_id not in ngrams_by_set:
+                ngrams_by_set[set_id] = {
+                    'melodic_ngram_set_id': set_id,
+                    'ngram_set_slug': row['ngram_set_slug'],
+                    'ngram_set_description': row['ngram_set_description'],
+                    'ngrams_number': row['ngrams_number'],
+                    'interval_kind': row['interval_kind'],
+                    'combine_unisons': bool(row['combine_unisons']),
+                    'note_set_slug': row['note_set_slug'],
+                    'ngrams': []
+                }
+            
+            ngrams_by_set[set_id]['ngrams'].append({
+                'ngram_id': row['ngram_id'],
+                'piece_id': row['piece_id'],
+                'note_id': row['note_id'],
+                'voice': row['voice'],
+                'voice_name': row['voice_name'],
+                'onset': row['onset'],
+                'ngram': row['ngram'],
+                'ngram_length': row['ngram_length']
+            })
+        
+        return jsonify({
+            'success': True,
+            'note_id': note_id,
+            'note_info': dict(note),
+            'melodic_ngrams': list(ngrams_by_set.values()),
+            'total_sets': len(ngrams_by_set),
+            'total_ngrams': sum(len(set_data['ngrams']) for set_data in ngrams_by_set.values())
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@pieces_bp.route('/notes/batch-melodic-ngrams', methods=['POST'])
+def get_melodic_ngrams_for_multiple_notes():
+    """Get melodic ngrams for multiple note_ids"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'JSON data required'
+            }), 400
+        
+        note_ids = data.get('note_ids', [])
+        if not note_ids or not isinstance(note_ids, list):
+            return jsonify({
+                'success': False,
+                'error': 'note_ids array is required'
+            }), 400
+        
+        # Limit to prevent excessive queries
+        if len(note_ids) > 10:
+            return jsonify({
+                'success': False,
+                'error': 'Maximum 10 note_ids allowed per request'
+            }), 400
+        
+        import sqlite3
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        db_path = os.path.join(project_root, 'database', 'analysis.db')
+        
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        results = {}
+        
+        for note_id in note_ids:
+            # Verify note exists and get basic info
+            cursor.execute("SELECT * FROM notes WHERE note_id = ?", (note_id,))
+            note = cursor.fetchone()
+            
+            if not note:
+                results[note_id] = {
+                    'success': False,
+                    'error': 'Note not found',
+                    'note_info': None,
+                    'melodic_ngrams': []
+                }
+                continue
+            
+            # Get melodic ngrams for this note
+            cursor.execute("""
+                SELECT 
+                    mn.ngram_id,
+                    mn.piece_id,
+                    mn.melodic_ngram_set_id,
+                    mn.note_id,
+                    mn.voice,
+                    mn.voice_name,
+                    mn.onset,
+                    mn.ngram,
+                    mn.ngram_length,
+                    mns.slug as ngram_set_slug,
+                    mns.description as ngram_set_description,
+                    mns.ngrams_number,
+                    mis.kind as interval_kind,
+                    ns.combine_unisons,
+                    ns.slug as note_set_slug
+                FROM melodic_ngrams mn
+                JOIN melodic_ngram_sets mns ON mn.melodic_ngram_set_id = mns.set_id
+                JOIN melodic_interval_sets mis ON mns.melodic_interval_set_id = mis.set_id
+                JOIN note_sets ns ON mis.note_set_id = ns.set_id
+                WHERE mn.note_id = ?
+                ORDER BY mns.set_id, mn.onset
+            """, (note_id,))
+            
+            rows = cursor.fetchall()
+            
+            # Group by melodic ngram set
+            ngrams_by_set = {}
+            for row in rows:
+                set_id = row['melodic_ngram_set_id']
+                if set_id not in ngrams_by_set:
+                    ngrams_by_set[set_id] = {
+                        'melodic_ngram_set_id': set_id,
+                        'ngram_set_slug': row['ngram_set_slug'],
+                        'ngram_set_description': row['ngram_set_description'],
+                        'ngrams_number': row['ngrams_number'],
+                        'interval_kind': row['interval_kind'],
+                        'combine_unisons': bool(row['combine_unisons']),
+                        'note_set_slug': row['note_set_slug'],
+                        'ngrams': []
+                    }
+                
+                ngrams_by_set[set_id]['ngrams'].append({
+                    'ngram_id': row['ngram_id'],
+                    'piece_id': row['piece_id'],
+                    'note_id': row['note_id'],
+                    'voice': row['voice'],
+                    'voice_name': row['voice_name'],
+                    'onset': row['onset'],
+                    'ngram': row['ngram'],
+                    'ngram_length': row['ngram_length']
+                })
+            
+            results[note_id] = {
+                'success': True,
+                'note_info': dict(note),
+                'melodic_ngrams': list(ngrams_by_set.values()),
+                'total_sets': len(ngrams_by_set),
+                'total_ngrams': sum(len(set_data['ngrams']) for set_data in ngrams_by_set.values())
+            }
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'results': results,
+            'processed_note_ids': note_ids
+        })
+    
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

@@ -37,6 +37,44 @@ interface AnalysisResult {
   search_criteria: any;
   osmd_analysis: any;
   error: string | null;
+  melodic_ngrams?: MelodicNgramResult | null;
+}
+
+interface MelodicNgramSet {
+  melodic_ngram_set_id: number;
+  ngram_set_slug: string;
+  ngram_set_description: string;
+  ngrams_number: number;
+  interval_kind: string;
+  combine_unisons: boolean;
+  note_set_slug: string;
+  ngrams: MelodicNgram[];
+}
+
+interface MelodicNgram {
+  ngram_id: number;
+  piece_id: number;
+  note_id: number;
+  voice: number;
+  voice_name: string | null;
+  onset: number;
+  ngram: string;
+  ngram_length: number;
+}
+
+interface MelodicNgramResult {
+  success: boolean;
+  results?: {
+    [noteId: string]: {
+      success: boolean;
+      note_info?: DatabaseNote;
+      melodic_ngrams: MelodicNgramSet[];
+      total_sets: number;
+      total_ngrams: number;
+      error?: string;
+    };
+  };
+  error?: string;
 }
 
 const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({ 
@@ -82,6 +120,39 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
 
       const searchResult = await searchResponse.json();
       
+      let melodicNgramsResult: MelodicNgramResult | null = null;
+      
+      // 如果找到了匹配的音符，获取它们的melodic ngrams
+      if (searchResult.success && searchResult.database_matches) {
+        const noteIds: number[] = [];
+        
+        if (searchResult.database_matches.note_set_1?.note_id) {
+          noteIds.push(searchResult.database_matches.note_set_1.note_id);
+        }
+        if (searchResult.database_matches.note_set_2?.note_id) {
+          noteIds.push(searchResult.database_matches.note_set_2.note_id);
+        }
+        
+        if (noteIds.length > 0) {
+          try {
+            const ngramsResponse = await fetch(`http://localhost:5000/api/notes/batch-melodic-ngrams`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                note_ids: noteIds
+              })
+            });
+            
+            melodicNgramsResult = await ngramsResponse.json();
+          } catch (ngramError) {
+            console.warn('Failed to fetch melodic ngrams:', ngramError);
+            // 继续执行，不阻断主要功能
+          }
+        }
+      }
+      
       const result: AnalysisResult = {
         success: searchResult.success,
         database_matches: searchResult.success ? searchResult.database_matches : null,
@@ -101,7 +172,8 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
           duration: osmdNoteInfo.duration,
           extraction_method: 'osmd_api_with_parts'
         },
-        error: searchResult.success ? null : searchResult.error
+        error: searchResult.success ? null : searchResult.error,
+        melodic_ngrams: melodicNgramsResult
       };
 
       setAnalysisResult(result);
@@ -133,7 +205,8 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
           duration: osmdNoteInfo.duration,
           extraction_method: 'osmd_api_with_parts'
         },
-        error: errorMessage
+        error: errorMessage,
+        melodic_ngrams: null
       };
 
       setAnalysisResult(errorResult);
@@ -237,6 +310,76 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
     );
   };
 
+  const renderMelodicNgrams = (melodicNgramsResult: MelodicNgramResult | null) => {
+    if (!melodicNgramsResult || !melodicNgramsResult.success || !melodicNgramsResult.results) {
+      return null;
+    }
+
+    const allNoteIds = Object.keys(melodicNgramsResult.results);
+    if (allNoteIds.length === 0) {
+      return null;
+    }
+
+    return (
+      <div className="space-y-3">
+        <h4 className="font-semibold text-sm text-indigo-800">旋律N-gram分析</h4>
+        
+        {allNoteIds.map(noteId => {
+          const ngramData = melodicNgramsResult.results![noteId];
+          
+          if (!ngramData.success || ngramData.melodic_ngrams.length === 0) {
+            return (
+              <div key={noteId} className="p-2 bg-gray-50 rounded text-xs">
+                <p className="text-gray-600">Note ID {noteId}: 未找到melodic ngrams</p>
+              </div>
+            );
+          }
+
+          return (
+            <div key={noteId} className="p-3 bg-indigo-50 border border-indigo-200 rounded text-xs">
+              <h5 className="font-medium mb-2 text-indigo-800">
+                Note ID: {noteId} (共 {ngramData.total_sets} 个集合, {ngramData.total_ngrams} 个ngrams)
+              </h5>
+              
+              <div className="space-y-2">
+                {ngramData.melodic_ngrams.map((ngramSet, setIndex) => (
+                  <div key={ngramSet.melodic_ngram_set_id} className="p-2 bg-white border rounded">
+                    <h6 className="font-medium text-xs text-indigo-700 mb-1">
+                      {ngramSet.ngram_set_slug} - {ngramSet.interval_kind} ({ngramSet.ngrams_number}-grams)
+                    </h6>
+                    <div className="text-xs text-gray-600 mb-1">
+                      Set ID: {ngramSet.melodic_ngram_set_id} | 
+                      Combine Unisons: {ngramSet.combine_unisons ? 'Yes' : 'No'} |
+                      Note Set: {ngramSet.note_set_slug}
+                    </div>
+                    
+                    <div className="space-y-1">
+                      {ngramSet.ngrams.map((ngram, ngramIndex) => (
+                        <div key={ngram.ngram_id} className="flex justify-between items-center p-1 bg-gray-50 rounded">
+                          <div className="flex-1">
+                            <span className="font-mono text-xs font-medium text-blue-600">
+                              {ngram.ngram}
+                            </span>
+                            <span className="text-gray-500 text-xs ml-2">
+                              (长度: {ngram.ngram_length})
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            ID: {ngram.ngram_id} | Voice: {ngram.voice} | Onset: {ngram.onset}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   if (!osmdNoteInfo) {
     return (
       <div className="text-center text-muted-foreground text-xs mt-8">
@@ -322,6 +465,9 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
           </div>
         </div>
       )}
+
+      {/* Melodic N-grams */}
+      {analysisResult?.melodic_ngrams && renderMelodicNgrams(analysisResult.melodic_ngrams)}
 
       {/* Error Information */}
       {(error || analysisResult?.error) && (
