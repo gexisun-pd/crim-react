@@ -4,7 +4,7 @@ import { Piece } from '../types';
 
 interface SimpleOSMDProps {
   piece: Piece | null;
-  onNoteClick?: (noteDetails: any) => void;
+  onNoteClick?: (osmdNoteInfo: any) => void; // 现在只传递OSMD的原始数据
 }
 
 const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
@@ -112,7 +112,7 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
     });
   };
 
-  const handleNoteClick = async (event: MouseEvent) => {
+  const handleNoteClick = (event: MouseEvent) => {
     const target = event.target as SVGElement;
     
     // 使用OSMD的正确API查找被点击的音符
@@ -133,81 +133,8 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
         (noteInfo.svgElement as HTMLElement).style.opacity = '1';
       }
       
-      // 调用新的API来搜索数据库中的音符
-      try {
-        const searchResponse = await fetch(`http://localhost:5000/api/pieces/${piece!.id}/notes/search-by-osmd`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            measure: noteInfo.measureNumber,
-            beat: noteInfo.beat,
-            part_id: noteInfo.partId,
-            tolerance: 0.25
-          })
-        });
-
-        const searchResult = await searchResponse.json();
-        
-        const noteDetails = {
-          osmd_analysis: {
-            measure: noteInfo.measureNumber,
-            beat: noteInfo.beat,
-            voice_id: noteInfo.partId, // Part ID (真正的声部编号)
-            voice_name: noteInfo.partName, // Part Name (真正的声部名称)
-            part_id: noteInfo.partId, // 新增：明确的 part 信息
-            part_name: noteInfo.partName,
-            voice_index: noteInfo.voiceIndex, // Voice 是 Part 内的子层
-            pitch: noteInfo.pitch,
-            duration: noteInfo.duration,
-            extraction_method: 'osmd_api_with_parts'
-          },
-          database_matches: searchResult.success ? searchResult.database_matches : null,
-          search_criteria: searchResult.success ? searchResult.search_criteria : {
-            measure: noteInfo.measureNumber,
-            beat: noteInfo.beat,
-            part_id: noteInfo.partId,
-            voice: noteInfo.partId,
-            position_based_search: true
-          },
-          error: searchResult.success ? null : searchResult.error,
-          raw_osmd_data: noteInfo
-        };
-        
-        onNoteClick(noteDetails);
-        
-      } catch (error) {
-        console.error('Error searching database:', error);
-        
-        // 如果API调用失败，仍然返回OSMD分析结果
-        const noteDetails = {
-          osmd_analysis: {
-            measure: noteInfo.measureNumber,
-            beat: noteInfo.beat,
-            voice_id: noteInfo.partId,
-            voice_name: noteInfo.partName,
-            part_id: noteInfo.partId,
-            part_name: noteInfo.partName,
-            voice_index: noteInfo.voiceIndex,
-            pitch: noteInfo.pitch,
-            duration: noteInfo.duration,
-            extraction_method: 'osmd_api_with_parts'
-          },
-          database_matches: null,
-          search_criteria: {
-            measure: noteInfo.measureNumber,
-            beat: noteInfo.beat,
-            part_id: noteInfo.partId,
-            voice: noteInfo.partId,
-            position_based_search: true
-          },
-          error: `API调用失败: ${(error as Error).message}`,
-          raw_osmd_data: noteInfo
-        };
-        
-        onNoteClick(noteDetails);
-      }
+      // 只传递OSMD的原始数据，让NoteAnalyzer组件处理数据库搜索
+      onNoteClick(noteInfo);
     }
   };
 
@@ -295,13 +222,55 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
                     const sourceMeasure = osmd.Sheet?.SourceMeasures?.[measureIndex];
                     const measureNumber = sourceMeasure ? sourceMeasure.MeasureNumber : measureIndex + 1;
                     
-                    // 获取beat信息 - 尝试多种方法
+                    // 获取beat信息 - 考虑拍号的正确计算
                     let beat = 1; // 从1开始的默认值
                     
                     if (staffEntry.sourceStaffEntry?.Timestamp) {
-                      // OSMD的时间戳通常从0开始，我们需要转换为从1开始的beat
-                      const rawBeat = staffEntry.sourceStaffEntry.Timestamp.RealValue * 4;
-                      beat = rawBeat + 1; // 转换为从1开始
+                      // 获取当前小节的拍号信息
+                      let timeSignatureNumerator = 4; // 默认4/4拍
+                      let timeSignatureDenominator = 4;
+                      
+                      // 尝试从多个位置获取拍号信息
+                      try {
+                        if (sourceMeasure?.ActiveTimeSignature) {
+                          const ts = sourceMeasure.ActiveTimeSignature as any;
+                          timeSignatureNumerator = ts.Numerator || ts.numerator || 4;
+                          timeSignatureDenominator = ts.Denominator || ts.denominator || 4;
+                        } else if ((sourceMeasure as any)?.timeSignature) {
+                          const ts = (sourceMeasure as any).timeSignature;
+                          timeSignatureNumerator = ts.Numerator || ts.numerator || 4;
+                          timeSignatureDenominator = ts.Denominator || ts.denominator || 4;
+                        } else if (osmd.Sheet?.SourceMeasures?.[0]?.ActiveTimeSignature) {
+                          const ts = osmd.Sheet.SourceMeasures[0].ActiveTimeSignature as any;
+                          timeSignatureNumerator = ts.Numerator || ts.numerator || 4;
+                          timeSignatureDenominator = ts.Denominator || ts.denominator || 4;
+                        }
+                      } catch (tsError) {
+                        console.log('Could not get time signature, using 4/4 default:', tsError);
+                      }
+                      
+                      // 计算beat位置：OSMD的RealValue已经是标准化时间戳
+                      // 我们需要根据拍号调整计算
+                      // RealValue是基于whole note的分数，我们需要转换为基于拍号分母的beat
+                      const rawTimestamp = staffEntry.sourceStaffEntry.Timestamp.RealValue;
+                      
+                      // 计算每拍在whole note中的长度
+                      const beatLength = 1.0 / timeSignatureDenominator; // 例如4/4拍中每拍=1/4 whole note
+                      
+                      // 计算在当前小节中的beat位置（从0开始）
+                      const beatInMeasure = rawTimestamp / beatLength;
+                      
+                      // 转换为从1开始的beat编号
+                      beat = beatInMeasure + 1;
+                      
+                      console.log('Beat calculation debug:', {
+                        rawTimestamp,
+                        timeSignature: `${timeSignatureNumerator}/${timeSignatureDenominator}`,
+                        beatLength,
+                        beatInMeasure,
+                        finalBeat: beat
+                      });
+                      
                     } else if (staffEntry.relativePosition) {
                       // 如果有相对位置信息，也进行类似转换
                       const rawBeat = staffEntry.relativePosition.x || 0;
@@ -402,7 +371,7 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
                       graphicalNote: graphicalNote,
                       staffEntry: staffEntry,
                       svgElement: noteSvgElement,
-                      note: 'Beat值已从OSMD的0-based系统转换为1-based系统，partId为声部编号，partName为声部名称'
+                      note: 'Beat值已根据拍号正确计算，从1开始。partId为声部编号，partName为声部名称'
                     };
                   }
                 } catch (noteError) {
@@ -436,7 +405,7 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
           </div>
         )}
         <div style={{ marginTop: '5px', fontSize: '12px', color: '#888' }}>
-          使用 OSMD 原生 API 提取音符信息。Beat 从1开始，使用 Part ID/Name 作为声部信息（而非 Voice）
+          使用 OSMD 原生 API 提取音符信息。Beat 计算已考虑拍号，从1开始。使用 Part ID/Name 作为声部信息。数据库搜索由 NoteAnalyzer 组件处理。
         </div>
       </div>
       

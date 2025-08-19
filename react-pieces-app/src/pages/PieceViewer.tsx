@@ -1,20 +1,27 @@
 import React, { useState } from 'react';
 import PieceSelector from '../components/PieceSelector';
 import SimpleOSMD from '../components/SimpleOSMD';
+import NoteAnalyzer from '../components/NoteAnalyzer';
 import { Piece } from '../types';
 
 const PieceViewer: React.FC = () => {
   const [selectedPiece, setSelectedPiece] = useState<Piece | null>(null);
-  const [selectedNoteDetails, setSelectedNoteDetails] = useState<any>(null);
+  const [osmdNoteInfo, setOsmdNoteInfo] = useState<any>(null); // OSMD原始数据
+  const [analysisResult, setAnalysisResult] = useState<any>(null); // 分析结果
 
   const handlePieceSelect = (piece: Piece | null) => {
     setSelectedPiece(piece);
-    setSelectedNoteDetails(null); // 清除之前选择的音符
+    setOsmdNoteInfo(null); // 清除之前选择的音符
+    setAnalysisResult(null); // 清除分析结果
   };
 
-  const handleNoteClick = (noteDetails: any) => {
-    console.log('Note clicked in PieceViewer:', noteDetails);
-    setSelectedNoteDetails(noteDetails);
+  const handleNoteClick = (osmdNoteInfo: any) => {
+    console.log('Note clicked in PieceViewer:', osmdNoteInfo);
+    setOsmdNoteInfo(osmdNoteInfo);
+  };
+
+  const handleAnalysisComplete = (result: any) => {
+    setAnalysisResult(result);
   };
 
   return (
@@ -76,240 +83,11 @@ const PieceViewer: React.FC = () => {
 
           {/* Right Panel - Note Analysis */}
           <div className="col-span-3 bg-card rounded-lg border p-3 overflow-y-auto">
-            <h3 className="text-sm font-semibold mb-3">音符分析</h3>
-            
-            {selectedNoteDetails ? (
-              <div className="space-y-3">
-                {/* OSMD Analysis */}
-                {selectedNoteDetails.osmd_analysis && (
-                  <div className="p-2 bg-blue-50 rounded text-xs">
-                    <h4 className="font-semibold mb-2 text-blue-800">OSMD 分析</h4>
-                    <div className="space-y-1">
-                      <div className="flex justify-between">
-                        <span className="text-blue-600">小节:</span>
-                        <span className="font-mono">{selectedNoteDetails.osmd_analysis.measure}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-600">拍子:</span>
-                        <span className="font-mono">{selectedNoteDetails.osmd_analysis.beat}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-600">声部ID:</span>
-                        <span className="font-mono">{selectedNoteDetails.osmd_analysis.part_id}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-600">声部名:</span>
-                        <span className="text-xs">{selectedNoteDetails.osmd_analysis.part_name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-600">音高:</span>
-                        <span className="text-xs">{selectedNoteDetails.osmd_analysis.pitch}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-600">时值:</span>
-                        <span className="text-xs">{selectedNoteDetails.osmd_analysis.duration}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Database Matches */}
-                {selectedNoteDetails.database_matches && (
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-xs">数据库匹配</h4>
-                    
-                    {/* Note Set 1 */}
-                    <div className="p-2 border rounded text-xs">
-                      <h5 className="font-medium mb-1 text-green-700">Note Set 1 (combine_unisons=True)</h5>
-                      {selectedNoteDetails.database_matches.note_set_1 ? (
-                        <div className="space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">note_id:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_1.note_id}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">piece_id:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_1.piece_id}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">note_set_id:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_1.note_set_id}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">voice:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_1.voice}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">voice_name:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_1.voice_name || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">onset:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_1.onset}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">duration:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_1.duration || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">offset:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_1.offset || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">measure:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_1.measure}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">beat:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_1.beat}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">pitch:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_1.pitch || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">name:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_1.name || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">step:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_1.step || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">octave:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_1.octave || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">alter:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_1.alter || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">type:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_1.type || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">staff:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_1.staff || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">tie:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_1.tie || 'null'}</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground text-xs">未找到匹配</p>
-                      )}
-                    </div>
-
-                    {/* Note Set 2 */}
-                    <div className="p-2 border rounded text-xs">
-                      <h5 className="font-medium mb-1 text-purple-700">Note Set 2 (combine_unisons=False)</h5>
-                      {selectedNoteDetails.database_matches.note_set_2 ? (
-                        <div className="space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">note_id:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_2.note_id}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">piece_id:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_2.piece_id}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">note_set_id:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_2.note_set_id}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">voice:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_2.voice}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">voice_name:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_2.voice_name || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">onset:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_2.onset}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">duration:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_2.duration || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">offset:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_2.offset || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">measure:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_2.measure}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">beat:</span>
-                            <span className="font-mono text-xs">{selectedNoteDetails.database_matches.note_set_2.beat}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">pitch:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_2.pitch || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">name:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_2.name || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">step:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_2.step || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">octave:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_2.octave || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">alter:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_2.alter || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">type:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_2.type || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">staff:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_2.staff || 'null'}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">tie:</span>
-                            <span className="text-xs">{selectedNoteDetails.database_matches.note_set_2.tie || 'null'}</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-muted-foreground text-xs">未找到匹配</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Search Criteria */}
-                {selectedNoteDetails.search_criteria && (
-                  <div className="p-2 bg-gray-50 rounded text-xs">
-                    <h5 className="font-medium mb-1">搜索条件</h5>
-                    <div className="space-y-1">
-                      <div>小节: <code className="text-xs">{selectedNoteDetails.search_criteria.measure}</code></div>
-                      <div>拍子: <code className="text-xs">{selectedNoteDetails.search_criteria.beat}</code></div>
-                      <div>声部: <code className="text-xs">{selectedNoteDetails.search_criteria.part || selectedNoteDetails.search_criteria.voice}</code></div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Error Information */}
-                {selectedNoteDetails.error && (
-                  <div className="p-2 bg-red-50 border border-red-200 rounded text-xs">
-                    <p className="text-red-600">错误: {selectedNoteDetails.error}</p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center text-muted-foreground text-xs mt-8">
-                <p>点击乐谱中的音符来查看分析结果</p>
-              </div>
-            )}
+            <NoteAnalyzer 
+              piece={selectedPiece}
+              osmdNoteInfo={osmdNoteInfo}
+              onAnalysisComplete={handleAnalysisComplete}
+            />
           </div>
         </div>
       </div>
