@@ -36,8 +36,11 @@ def init_compare_database():
         # Create melodic_ngram_values table
         create_melodic_ngram_values_table(cursor)
         
+        # Create piece_pair_values table
+        create_piece_pair_values_table(cursor)
+        
         conn.commit()
-        print("Melodic ngram values table initialized successfully")
+        print("Melodic ngram values and piece pair values tables initialized successfully")
         return True
         
     except Exception as e:
@@ -141,23 +144,91 @@ def create_melodic_ngram_values_table(cursor):
     else:
         print("Melodic ngram values tables created (empty)")
 
+def create_piece_pair_values_table(cursor):
+    """
+    Create piece_pair_values table to store shared ngram values between piece pairs.
+    
+    This table stores all shared ngram values between every pair of pieces,
+    along with the note_ids for each value in both pieces. It enables efficient
+    analysis of musical similarities between pieces.
+    """
+    
+    create_table_sql = """
+    CREATE TABLE IF NOT EXISTS piece_pair_values (
+        pair_value_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        piece_a_id INTEGER NOT NULL,               -- ID of first piece (piece_a_id <= piece_b_id)
+        piece_b_id INTEGER NOT NULL,               -- ID of second piece
+        ngram_value TEXT NOT NULL,                 -- The shared ngram pattern
+        ngram_length INTEGER NOT NULL,             -- Length of the ngram
+        
+        -- Note IDs for this value in each piece (JSON arrays)
+        notes_in_a TEXT NOT NULL,                  -- JSON array of note_ids in piece A
+        notes_in_b TEXT NOT NULL,                  -- JSON array of note_ids in piece B
+        
+        -- Statistics
+        count_in_a INTEGER NOT NULL,               -- Number of occurrences in piece A
+        count_in_b INTEGER NOT NULL,               -- Number of occurrences in piece B
+        total_shared_notes INTEGER NOT NULL,       -- count_in_a + count_in_b
+        
+        -- Piece metadata (for faster queries without joins)
+        composer_a TEXT NOT NULL,                  -- Composer of piece A
+        composer_b TEXT NOT NULL,                  -- Composer of piece B
+        same_composer BOOLEAN NOT NULL,            -- Whether pieces are by same composer
+        
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        
+        -- Foreign key constraints
+        FOREIGN KEY (piece_a_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
+        FOREIGN KEY (piece_b_id) REFERENCES pieces (piece_id) ON DELETE CASCADE,
+        
+        -- Ensure no duplicate pairs and maintain ordering (piece_a_id <= piece_b_id)
+        CONSTRAINT unique_piece_pair_value UNIQUE (piece_a_id, piece_b_id, ngram_value),
+        CONSTRAINT ordered_pair CHECK (piece_a_id <= piece_b_id)
+    );
+    
+    -- Indexes for efficient querying
+    CREATE INDEX IF NOT EXISTS idx_piece_pair_values_piece_a ON piece_pair_values(piece_a_id);
+    CREATE INDEX IF NOT EXISTS idx_piece_pair_values_piece_b ON piece_pair_values(piece_b_id);
+    CREATE INDEX IF NOT EXISTS idx_piece_pair_values_pair ON piece_pair_values(piece_a_id, piece_b_id);
+    CREATE INDEX IF NOT EXISTS idx_piece_pair_values_value ON piece_pair_values(ngram_value);
+    CREATE INDEX IF NOT EXISTS idx_piece_pair_values_length ON piece_pair_values(ngram_length);
+    CREATE INDEX IF NOT EXISTS idx_piece_pair_values_count_a ON piece_pair_values(count_in_a);
+    CREATE INDEX IF NOT EXISTS idx_piece_pair_values_count_b ON piece_pair_values(count_in_b);
+    CREATE INDEX IF NOT EXISTS idx_piece_pair_values_total ON piece_pair_values(total_shared_notes);
+    CREATE INDEX IF NOT EXISTS idx_piece_pair_values_composer_a ON piece_pair_values(composer_a);
+    CREATE INDEX IF NOT EXISTS idx_piece_pair_values_composer_b ON piece_pair_values(composer_b);
+    CREATE INDEX IF NOT EXISTS idx_piece_pair_values_same_composer ON piece_pair_values(same_composer);
+    """
+    
+    cursor.executescript(create_table_sql)
+    
+    # Check if data already exists
+    cursor.execute('SELECT COUNT(*) FROM piece_pair_values')
+    existing_pairs = cursor.fetchone()[0]
+    
+    if existing_pairs > 0:
+        print(f"Piece pair values table already contains {existing_pairs:,} pair-value records")
+    else:
+        print("Piece pair values table created (empty)")
+
 def main():
-    parser = argparse.ArgumentParser(description='Initialize melodic_ngram_values table')
+    parser = argparse.ArgumentParser(description='Initialize melodic_ngram_values and piece_pair_values tables')
     
     args = parser.parse_args()
     
-    print("=== Melodic Ngram Values Table Initialization ===")
+    print("=== Melodic Ngram Values and Piece Pair Values Table Initialization ===")
     
     # Initialize table
     success = init_compare_database()
     
     if success:
-        print("\nMelodic ngram values table initialization completed!")
+        print("\nTable initialization completed!")
         print("\nNext steps:")
-        print("1. Run 'python3 core/compare/melodic_ngram_values.py' to populate the table")
-        print("2. Use the table for efficient ngram pattern searches")
+        print("1. Run 'python3 core/compare/melodic_ngram_values.py' to populate the ngram values table")
+        print("2. Run 'python3 core/compare/piece_pair_values.py' to populate the piece pair values table")
+        print("3. Use the tables for efficient piece similarity analysis")
     else:
-        print("\nMelodic ngram values table initialization failed!")
+        print("\nTable initialization failed!")
 
 if __name__ == "__main__":
     main()
