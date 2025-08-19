@@ -1,20 +1,19 @@
 import React, { useState } from 'react';
-import HomePage from './pages/HomePage';
-import TestPage from './pages/TestPage';
+import PieceViewer from './pages/PieceViewer';
 import OSMDTest from './components/OSMDTest';
 import './App.css';
 
 const App: React.FC = () => {
-  const [currentPage, setCurrentPage] = useState<'home' | 'test' | 'osmd'>('test');
+  const [currentPage, setCurrentPage] = useState<'main' | 'osmd'>('main');
 
   return (
     <div className="App">
       <div style={{ padding: '10px', backgroundColor: '#f0f0f0', borderBottom: '1px solid #ddd' }}>
         <button 
-          onClick={() => setCurrentPage('home')}
+          onClick={() => setCurrentPage('main')}
           style={{ 
             padding: '8px 16px', 
-            backgroundColor: currentPage === 'home' ? '#28a745' : '#007bff', 
+            backgroundColor: currentPage === 'main' ? '#28a745' : '#007bff', 
             color: 'white', 
             border: 'none', 
             borderRadius: '4px',
@@ -22,21 +21,7 @@ const App: React.FC = () => {
             marginRight: '10px'
           }}
         >
-          Original HomePage
-        </button>
-        <button 
-          onClick={() => setCurrentPage('test')}
-          style={{ 
-            padding: '8px 16px', 
-            backgroundColor: currentPage === 'test' ? '#28a745' : '#007bff', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px',
-            cursor: 'pointer',
-            marginRight: '10px'
-          }}
-        >
-          Test Page (SimpleOSMD)
+          Piece Viewer (Main App)
         </button>
         <button 
           onClick={() => setCurrentPage('osmd')}
@@ -53,8 +38,7 @@ const App: React.FC = () => {
         </button>
       </div>
       
-      {currentPage === 'home' && <HomePage />}
-      {currentPage === 'test' && <TestPage />}
+      {currentPage === 'main' && <PieceViewer />}
       {currentPage === 'osmd' && <OSMDTest />}
     </div>
   );
