@@ -214,48 +214,6 @@ class PiecesDB:
                 conn.close()
             return []
     
-    def get_all_melodic_ngram_sets_non_entry(self) -> List[Dict]:
-        """Get all melodic ngram sets with entry=False from the database"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute("SELECT * FROM melodic_ngram_sets WHERE ngrams_entry = 0 ORDER BY set_id")
-            rows = cursor.fetchall()
-            
-            columns = [description[0] for description in cursor.description]
-            ngram_sets = [dict(zip(columns, row)) for row in rows]
-            
-            conn.close()
-            return ngram_sets
-            
-        except sqlite3.Error as e:
-            print(f"Database error retrieving non-entry melodic ngram sets: {e}")
-            if conn:
-                conn.close()
-            return []
-    
-    def get_all_melodic_ngram_sets_entry_only(self) -> List[Dict]:
-        """Get all melodic ngram sets with entry=True from the database"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute("SELECT * FROM melodic_ngram_sets WHERE ngrams_entry = 1 ORDER BY set_id")
-            rows = cursor.fetchall()
-            
-            columns = [description[0] for description in cursor.description]
-            ngram_sets = [dict(zip(columns, row)) for row in rows]
-            
-            conn.close()
-            return ngram_sets
-            
-        except sqlite3.Error as e:
-            print(f"Database error retrieving entry melodic ngram sets: {e}")
-            if conn:
-                conn.close()
-            return []
-    
     def notes_exist_for_piece_and_set(self, piece_id: int, note_set_id: int) -> bool:
         """Check if notes already exist for a piece and note set combination"""
         try:

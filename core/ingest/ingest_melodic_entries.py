@@ -341,12 +341,12 @@ def ingest_melodic_entries_for_all_pieces():
     
     print(f"Found {len(pieces)} pieces in database")
     
-    # Get all melodic n-gram sets (only entry=True)
-    print("Retrieving all melodic n-gram sets (entry=True only)...")
-    ngram_sets = db.get_all_melodic_ngram_sets_entry_only()
+    # Get all melodic n-gram sets
+    print("Retrieving all melodic n-gram sets...")
+    ngram_sets = db.get_all_melodic_ngram_sets()
     
     if not ngram_sets:
-        print("No melodic n-gram sets (entry=True) found in database.")
+        print("No melodic n-gram sets found in database.")
         print("Please run core/db/init_db.py first to create parameter sets.")
         return
     

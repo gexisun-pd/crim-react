@@ -37,9 +37,9 @@ class IngestionPipeline:
             ('init', 'Initialize Database', 'core/db/init_db.py'),
             ('pieces', 'Ingest Pieces', 'core/ingest/ingest_pieces.py'),
             ('notes', 'Ingest Notes', 'core/ingest/ingest_notes.py'),
+            ('note_entry', 'Ingest Note Entry', 'core/ingest/ingest_note_entry.py'),
             ('intervals', 'Ingest Melodic Intervals', 'core/ingest/ingest_melodic_intervals.py'),
-            ('ngrams', 'Ingest Melodic N-grams', 'core/ingest/ingest_melodic_ngrams.py'),
-            ('entries', 'Ingest Melodic Entries', 'core/ingest/ingest_melodic_entries.py')
+            ('ngrams', 'Ingest Melodic N-grams', 'core/ingest/ingest_melodic_ngrams.py')
         ]
         
         self.step_map = {step[0]: step for step in self.steps}
@@ -208,10 +208,10 @@ Examples:
     parser.add_argument('--skip-init', action='store_true',
                        help='Skip database initialization step')
     parser.add_argument('--step', 
-                       choices=['init', 'pieces', 'notes', 'intervals', 'ngrams', 'entries'],
+                       choices=['init', 'pieces', 'notes', 'note_entry', 'intervals', 'ngrams'],
                        help='Run only a specific step')
     parser.add_argument('--from', dest='start_from',
-                       choices=['init', 'pieces', 'notes', 'intervals', 'ngrams', 'entries'],
+                       choices=['init', 'pieces', 'notes', 'note_entry', 'intervals', 'ngrams'],
                        help='Start pipeline from a specific step')
     parser.add_argument('--list-steps', action='store_true',
                        help='List all available pipeline steps')

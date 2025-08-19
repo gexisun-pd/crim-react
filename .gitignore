@@ -8,6 +8,9 @@ data/
 
 # Database files
 database/analysis.db
+database/analysis.db-shm
+database/analysis.db-wal
+database/*.backup
 
 # Documentation
 docs/

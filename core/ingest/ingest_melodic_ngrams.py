@@ -295,7 +295,7 @@ def melodic_ngrams_exist_for_piece_and_set(piece_id: int, ngram_set_id: int) -> 
         return False
 
 def ingest_melodic_ngrams_for_all_pieces():
-    """Main function to ingest melodic n-grams for all pieces using all melodic n-gram sets (entry=False only)"""
+    """Main function to ingest melodic n-grams for all pieces using all melodic n-gram sets"""
     
     # Check if crim_intervals is available before proceeding
     if not CRIM_INTERVALS_AVAILABLE:
@@ -320,18 +320,18 @@ def ingest_melodic_ngrams_for_all_pieces():
     
     print(f"Found {len(pieces)} pieces in database")
     
-    # Get all melodic n-gram sets (only entry=False)
-    print("Retrieving all melodic n-gram sets (entry=False only)...")
-    ngram_sets = db.get_all_melodic_ngram_sets_non_entry()
+    # Get all melodic n-gram sets
+    print("Retrieving all melodic n-gram sets...")
+    ngram_sets = db.get_all_melodic_ngram_sets()
     
     if not ngram_sets:
         print("No melodic n-gram sets found in database.")
         print("Please run core/db/init_db.py first to create parameter sets.")
         return
     
-    print(f"Found {len(ngram_sets)} melodic n-gram sets (entry=False):")
+    print(f"Found {len(ngram_sets)} melodic n-gram sets:")
     for ngram_set in ngram_sets:
-        print(f"  Set {ngram_set['set_id']}: {ngram_set['slug']} (n={ngram_set['ngrams_number']}, entry={ngram_set['ngrams_entry']})")
+        print(f"  Set {ngram_set['set_id']}: {ngram_set['slug']} (n={ngram_set['ngrams_number']})")
     
     # Get project root directory (two levels up from core/ingest/)
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
@@ -351,7 +351,6 @@ def ingest_melodic_ngrams_for_all_pieces():
         ngram_slug = ngram_set['slug']
         melodic_interval_set_id = ngram_set['melodic_interval_set_id']
         ngrams_number = ngram_set['ngrams_number']
-        ngrams_entry = ngram_set['ngrams_entry']
         
         # Get the corresponding melodic interval set to find kind and note_set info
         melodic_sets = db.get_all_melodic_interval_sets()
@@ -373,7 +372,7 @@ def ingest_melodic_ngrams_for_all_pieces():
         combine_unisons = note_set['combine_unisons']
         
         print(f"\n--- Processing Melodic N-gram Set {ngram_set_id}: {ngram_slug} ---")
-        print(f"N-grams: {ngrams_number}, Entry: {ngrams_entry}, Kind: {kind}, Combine Unisons: {combine_unisons}")
+        print(f"N-grams: {ngrams_number}, Kind: {kind}, Combine Unisons: {combine_unisons}")
         
         set_processed = 0
         set_skipped = 0
