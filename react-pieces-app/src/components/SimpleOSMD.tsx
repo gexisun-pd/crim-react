@@ -370,8 +370,7 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
                       sourceNote: sourceNote,
                       graphicalNote: graphicalNote,
                       staffEntry: staffEntry,
-                      svgElement: noteSvgElement,
-                      note: 'Beat值已根据拍号正确计算，从1开始。partId为声部编号，partName为声部名称'
+                      svgElement: noteSvgElement
                     };
                   }
                 } catch (noteError) {
@@ -399,14 +398,6 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
         borderRadius: '4px'
       }}>
         <strong>Status:</strong> {status}
-        {piece && (
-          <div style={{ marginTop: '5px', fontSize: '14px', color: '#666' }}>
-            Loading: {piece.title} by {piece.composer}
-          </div>
-        )}
-        <div style={{ marginTop: '5px', fontSize: '12px', color: '#888' }}>
-          使用 OSMD 原生 API 提取音符信息。Beat 计算已考虑拍号，从1开始。使用 Part ID/Name 作为声部信息。数据库搜索由 NoteAnalyzer 组件处理。
-        </div>
       </div>
       
       <div 

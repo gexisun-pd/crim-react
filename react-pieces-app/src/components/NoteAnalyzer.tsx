@@ -176,6 +176,15 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
         melodic_ngrams: melodicNgramsResult
       };
 
+      // Console output for OSMD Analysis
+      console.log('OSMD Analysis:');
+      console.log(`Measure: ${result.osmd_analysis.measure}`);
+      console.log(`Beat: ${result.osmd_analysis.beat}`);
+      console.log(`Part ID: ${result.osmd_analysis.part_id}`);
+      console.log(`Part Name: ${result.osmd_analysis.part_name}`);
+      console.log(`Pitch: ${result.osmd_analysis.pitch}`);
+      console.log(`Duration: ${result.osmd_analysis.duration}`);
+
       setAnalysisResult(result);
       
       if (onAnalysisComplete) {
@@ -183,7 +192,7 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
       }
       
     } catch (err) {
-      const errorMessage = `API调用失败: ${(err as Error).message}`;
+      const errorMessage = `API call failed: ${(err as Error).message}`;
       setError(errorMessage);
       
       const errorResult: AnalysisResult = {
@@ -224,7 +233,7 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
       return (
         <div className="p-2 border rounded text-xs">
           <h5 className={`font-medium mb-1 ${colorClass}`}>{setName}</h5>
-          <p className="text-muted-foreground text-xs">未找到匹配</p>
+          <p className="text-muted-foreground text-xs">No match found</p>
         </div>
       );
     }
@@ -322,7 +331,7 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
 
     return (
       <div className="space-y-3">
-        <h4 className="font-semibold text-sm text-indigo-800">旋律N-gram分析</h4>
+        <h4 className="font-semibold text-sm text-indigo-800">Melodic N-gram Analysis</h4>
         
         {allNoteIds.map(noteId => {
           const ngramData = melodicNgramsResult.results![noteId];
@@ -330,7 +339,7 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
           if (!ngramData.success || ngramData.melodic_ngrams.length === 0) {
             return (
               <div key={noteId} className="p-2 bg-gray-50 rounded text-xs">
-                <p className="text-gray-600">Note ID {noteId}: 未找到melodic ngrams</p>
+                <p className="text-gray-600">Note ID {noteId}: No melodic ngrams found</p>
               </div>
             );
           }
@@ -338,7 +347,7 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
           return (
             <div key={noteId} className="p-3 bg-indigo-50 border border-indigo-200 rounded text-xs">
               <h5 className="font-medium mb-2 text-indigo-800">
-                Note ID: {noteId} (共 {ngramData.total_sets} 个集合, {ngramData.total_ngrams} 个ngrams)
+                Note ID: {noteId} (Total {ngramData.total_sets} sets, {ngramData.total_ngrams} ngrams)
               </h5>
               
               <div className="space-y-2">
@@ -361,7 +370,7 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
                               {ngram.ngram}
                             </span>
                             <span className="text-gray-500 text-xs ml-2">
-                              (长度: {ngram.ngram_length})
+                              (Length: {ngram.ngram_length})
                             </span>
                           </div>
                           <div className="text-xs text-gray-500">
@@ -383,59 +392,28 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
   if (!osmdNoteInfo) {
     return (
       <div className="text-center text-muted-foreground text-xs mt-8">
-        <p>点击乐谱中的音符来查看分析结果</p>
+        <p>Click on a note in the score to view analysis results</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold mb-3">音符分析</h3>
+      <h3 className="text-sm font-semibold mb-3">Note Analysis</h3>
       
       {/* Loading Indicator */}
       {isLoading && (
         <div className="p-2 bg-yellow-50 rounded text-xs">
-          <p className="text-yellow-600">正在搜索数据库...</p>
+          <p className="text-yellow-600">Searching database...</p>
         </div>
       )}
 
-      {/* OSMD Analysis */}
-      {analysisResult?.osmd_analysis && (
-        <div className="p-2 bg-blue-50 rounded text-xs">
-          <h4 className="font-semibold mb-2 text-blue-800">OSMD 分析</h4>
-          <div className="space-y-1">
-            <div className="flex justify-between">
-              <span className="text-blue-600">小节:</span>
-              <span className="font-mono">{analysisResult.osmd_analysis.measure}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-blue-600">拍子:</span>
-              <span className="font-mono">{analysisResult.osmd_analysis.beat}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-blue-600">声部ID:</span>
-              <span className="font-mono">{analysisResult.osmd_analysis.part_id}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-blue-600">声部名:</span>
-              <span className="text-xs">{analysisResult.osmd_analysis.part_name}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-blue-600">音高:</span>
-              <span className="text-xs">{analysisResult.osmd_analysis.pitch}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-blue-600">时值:</span>
-              <span className="text-xs">{analysisResult.osmd_analysis.duration}</span>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* OSMD Analysis - Now output to console instead of displaying */}
+      
       {/* Database Matches */}
       {analysisResult?.database_matches && (
         <div className="space-y-2">
-          <h4 className="font-semibold text-xs">数据库匹配</h4>
+          <h4 className="font-semibold text-xs">Database Matches</h4>
           
           {/* Note Set 1 */}
           {renderDatabaseNote(
@@ -456,12 +434,12 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
       {/* Search Criteria */}
       {analysisResult?.search_criteria && (
         <div className="p-2 bg-gray-50 rounded text-xs">
-          <h5 className="font-medium mb-1">搜索条件</h5>
+          <h5 className="font-medium mb-1">Search Criteria</h5>
           <div className="space-y-1">
-            <div>小节: <code className="text-xs">{analysisResult.search_criteria.measure}</code></div>
-            <div>拍子: <code className="text-xs">{analysisResult.search_criteria.beat}</code></div>
-            <div>声部: <code className="text-xs">{analysisResult.search_criteria.part_id || analysisResult.search_criteria.voice}</code></div>
-            <div>搜索类型: <code className="text-xs">基于位置匹配</code></div>
+            <div>Measure: <code className="text-xs">{analysisResult.search_criteria.measure}</code></div>
+            <div>Beat: <code className="text-xs">{analysisResult.search_criteria.beat}</code></div>
+            <div>Part: <code className="text-xs">{analysisResult.search_criteria.part_id || analysisResult.search_criteria.voice}</code></div>
+            <div>Search Type: <code className="text-xs">Position-based match</code></div>
           </div>
         </div>
       )}
@@ -472,7 +450,7 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
       {/* Error Information */}
       {(error || analysisResult?.error) && (
         <div className="p-2 bg-red-50 border border-red-200 rounded text-xs">
-          <p className="text-red-600">错误: {error || analysisResult?.error}</p>
+          <p className="text-red-600">Error: {error || analysisResult?.error}</p>
         </div>
       )}
     </div>

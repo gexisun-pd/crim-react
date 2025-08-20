@@ -30,7 +30,6 @@ const PieceViewer: React.FC = () => {
         {/* Header */}
         <div className="text-center mb-4">
           <h1 className="text-2xl font-bold text-foreground">Music Analysis Viewer</h1>
-          <p className="text-sm text-muted-foreground">分析音乐作品的小节、拍子和声部信息</p>
         </div>
 
         {/* Three Column Layout */}
@@ -40,25 +39,25 @@ const PieceViewer: React.FC = () => {
             <div className="space-y-3">
               {/* Piece Selector */}
               <div>
-                <h3 className="text-sm font-semibold mb-2">选择曲目</h3>
+                <h3 className="text-sm font-semibold mb-2">Select Piece</h3>
                 <PieceSelector onPieceSelect={handlePieceSelect} />
               </div>
 
               {/* Selected Piece Info */}
               {selectedPiece && (
                 <div>
-                  <h3 className="text-sm font-semibold mb-2">曲目信息</h3>
+                  <h3 className="text-sm font-semibold mb-2">Piece Information</h3>
                   <div className="space-y-2 text-xs">
                     <div>
-                      <label className="font-medium text-muted-foreground">标题</label>
+                      <label className="font-medium text-muted-foreground">Title</label>
                       <p className="text-foreground">{selectedPiece.title}</p>
                     </div>
                     <div>
-                      <label className="font-medium text-muted-foreground">作曲家</label>
+                      <label className="font-medium text-muted-foreground">Composer</label>
                       <p className="text-foreground">{selectedPiece.composer}</p>
                     </div>
                     <div>
-                      <label className="font-medium text-muted-foreground">文件名</label>
+                      <label className="font-medium text-muted-foreground">Filename</label>
                       <p className="text-xs font-mono bg-muted px-1 py-0.5 rounded break-all">
                         {selectedPiece.filename}
                       </p>
