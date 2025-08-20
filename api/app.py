@@ -14,7 +14,7 @@ def create_app():
     """Create and configure Flask application"""
     app = Flask(__name__)
     
-    # Enable CORS for React frontend with comprehensive configuration
+    # Enable CORS for React frontend - 使用Flask-CORS扩展统一处理
     CORS(app, 
          origins="*",  # Allow all origins for development
          supports_credentials=False,  # Set to False when using origins="*"
@@ -23,14 +23,8 @@ def create_app():
          max_age=3600  # Cache preflight requests for 1 hour
     )
     
-    # Add custom CORS headers for better compatibility
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,Origin,X-Requested-With')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        response.headers.add('Access-Control-Allow-Credentials', 'false')
-        return response
+    # 移除手动的CORS头设置以避免冲突
+    # Flask-CORS扩展已经处理了所有CORS头设置
     
     # Register blueprints - 移除/api前缀，让nginx处理路径重写
     app.register_blueprint(pieces_bp)

@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { getApiBaseUrl, getHealthCheckUrl } from '../config/api';
 
-const ApiDebugger: React.FC = () => {
+interface ApiDebuggerProps {
+  onClose?: () => void;
+}
+
+const ApiDebugger: React.FC<ApiDebuggerProps> = ({ onClose }) => {
   const [debugInfo, setDebugInfo] = useState<any>({});
   const [apiResponse, setApiResponse] = useState<string>('');
   const [healthResponse, setHealthResponse] = useState<string>('');
@@ -25,7 +29,7 @@ const ApiDebugger: React.FC = () => {
 
   const testApiCall = async () => {
     try {
-      const response = await fetch(`${getApiBaseUrl()}/api/pieces`);
+      const response = await fetch(`${getApiBaseUrl()}/pieces`);
       const data = await response.json();
       setApiResponse(`Status: ${response.status}\nData: ${JSON.stringify(data, null, 2)}`);
     } catch (error) {
@@ -45,7 +49,25 @@ const ApiDebugger: React.FC = () => {
 
   return (
     <div style={{ padding: '20px', fontFamily: 'monospace' }}>
-      <h2>API 调试信息</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h2>API 调试信息</h2>
+        {onClose && (
+          <button 
+            onClick={onClose}
+            style={{ 
+              background: '#dc3545', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '5px', 
+              padding: '10px 15px', 
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            关闭调试器
+          </button>
+        )}
+      </div>
       
       <h3>环境信息:</h3>
       <pre style={{ background: '#f5f5f5', padding: '10px', overflow: 'auto' }}>
@@ -54,7 +76,7 @@ const ApiDebugger: React.FC = () => {
 
       <h3>API 测试:</h3>
       <button onClick={testApiCall} style={{ margin: '10px', padding: '10px' }}>
-        测试 /api/pieces
+        测试 /pieces
       </button>
       <pre style={{ background: '#f0f0f0', padding: '10px', minHeight: '100px', overflow: 'auto' }}>
         {apiResponse || '点击按钮测试 API 调用'}
