@@ -102,7 +102,9 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
     noteElements.forEach(el => {
       (el as HTMLElement).style.cursor = 'pointer';
       el.addEventListener('mouseenter', () => {
-        (el as HTMLElement).style.opacity = '0.7';
+        if (!(el as HTMLElement).classList.contains('selected-note')) {
+          (el as HTMLElement).style.opacity = '0.7';
+        }
       });
       el.addEventListener('mouseleave', () => {
         if (!(el as HTMLElement).classList.contains('selected-note')) {
@@ -124,13 +126,40 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
       // 清除之前的选择
       document.querySelectorAll('.selected-note').forEach(el => {
         el.classList.remove('selected-note');
-        (el as HTMLElement).style.opacity = '1';
+        // 恢复原始样式
+        const element = el as HTMLElement;
+        element.style.opacity = '1';
+        element.style.fill = '';
+        element.style.stroke = '';
+        element.style.strokeWidth = '';
+        // 对于子元素也恢复样式
+        const childElements = el.querySelectorAll('*');
+        childElements.forEach(child => {
+          const childEl = child as HTMLElement;
+          childEl.style.fill = '';
+          childEl.style.stroke = '';
+          childEl.style.strokeWidth = '';
+        });
       });
       
-      // 高亮选择的音符
+      // 高亮选择的音符为红色
       if (noteInfo.svgElement) {
         noteInfo.svgElement.classList.add('selected-note');
-        (noteInfo.svgElement as HTMLElement).style.opacity = '1';
+        const element = noteInfo.svgElement as HTMLElement;
+        element.style.opacity = '1';
+        
+        // 设置音符为红色
+        element.style.fill = '#ff0000';
+        element.style.stroke = '#ff0000';
+        element.style.strokeWidth = '1px';
+        
+        // 对于子元素也设置红色
+        const childElements = element.querySelectorAll('*');
+        childElements.forEach(child => {
+          const childEl = child as HTMLElement;
+          childEl.style.fill = '#ff0000';
+          childEl.style.stroke = '#ff0000';
+        });
       }
       
       // 只传递OSMD的原始数据，让NoteAnalyzer组件处理数据库搜索
