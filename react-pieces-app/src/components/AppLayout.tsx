@@ -118,10 +118,10 @@ const AppContent: React.FC = () => {
         </SidebarContent>
       </Sidebar>
       <main className="flex-1">
-        <div className="border-b px-4 py-2 flex items-center gap-4">
+        <div className="border-b px-4 py-1 flex items-center gap-4">
           <SidebarTrigger />
           <div className="flex-1">
-            <h2 className="text-lg font-semibold">{getPageTitle()}</h2>
+            <h2 className="text-base font-semibold">{getPageTitle()}</h2>
           </div>
         </div>
         {renderContent()}

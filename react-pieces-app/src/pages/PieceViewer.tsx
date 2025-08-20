@@ -25,10 +25,10 @@ const PieceViewer: React.FC = () => {
   };
 
   return (
-    <div className="h-full bg-background p-4">
+    <div className="h-[calc(100vh-40px)] bg-background p-4">
       <div className="max-w-full mx-auto h-full">
         {/* Three Column Layout */}
-        <div className="grid grid-cols-12 gap-4 h-[calc(100vh-60px)]">
+        <div className="grid grid-cols-12 gap-4 h-full">
           {/* Left Panel - Piece Selection & Info */}
           <div className="col-span-2 bg-card rounded-lg border p-3 overflow-y-auto">
             <div className="space-y-3">
@@ -68,7 +68,7 @@ const PieceViewer: React.FC = () => {
           </div>
 
           {/* Middle Panel - Score Display */}
-          <div className="col-span-7 bg-card rounded-lg border overflow-y-auto relative">
+          <div className="col-span-7 bg-card rounded-lg border overflow-x-hidden overflow-y-auto">
             <SimpleOSMD 
               piece={selectedPiece} 
               onNoteClick={handleNoteClick}

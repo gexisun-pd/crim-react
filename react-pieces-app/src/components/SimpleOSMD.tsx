@@ -456,9 +456,9 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
       }, 100);
     }
   };  return (
-    <div className="p-5">
+    <div className="p-3">
       {/* Status and Zoom Controls in same row */}
-      <div className="flex justify-between items-center p-3 bg-muted mb-3 rounded">
+      <div className="flex justify-between items-center p-2 bg-muted mb-3 rounded">
         <div>
           <strong>Status:</strong> {status}
         </div>
@@ -493,7 +493,7 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
       
       <div 
         ref={containerRef}
-        className="border border-border min-h-[400px] bg-white p-3 rounded"
+        className="border border-border min-h-[400px] bg-white p-2 rounded overflow-x-hidden overflow-y-auto"
       />
     </div>
   );

@@ -296,7 +296,7 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
 
     return (
       <div className="space-y-3">
-        <h4 className="font-semibold text-sm text-indigo-800">Melodic N-gram Analysis</h4>
+        <h4 className="font-semibold text-sm">Melodic N-gram in Database</h4>
         
         {allNoteIds.map(noteId => {
           const ngramData = melodicNgramsResult.results![noteId];
@@ -348,8 +348,6 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold mb-3">Note Analysis</h3>
-      
       {/* Loading Indicator */}
       {isLoading && (
         <div className="p-2 bg-yellow-50 rounded text-xs">
@@ -362,7 +360,7 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
       {/* Database Matches */}
       {analysisResult?.database_matches && (
         <div className="space-y-2">
-          <h4 className="font-semibold text-xs">Database Matches</h4>
+          <h4 className="font-semibold text-sm">Note in Database</h4>
           
           {/* Note Set 1 */}
           {renderDatabaseNote(
