@@ -95,7 +95,7 @@ def main():
     
     # 网络诊断建议
     print(f"\n💡 故障排除建议:")
-    print("1. 确保API服务器正在运行: ps aux | grep fastapi")
+    print("1. 确保API服务器正在运行: ps aux | grep flask")
     print("2. 检查端口监听: netstat -tlnp | grep :9000")
     print("3. 检查防火墙: sudo ufw status")
     print("4. 从其他设备测试: curl http://10.113.82.229:9000/health")

@@ -10,7 +10,7 @@ class ApiService {
       return baseUrl;
     }
     
-    // 开发环境：直接连接到FastAPI服务器，不需要/api前缀
+    // 开发环境：直接连接到Flask服务器，不需要/api前缀
     return baseUrl;
   }
   private async request<T>(endpoint: string): Promise<ApiResponse<T>> {
@@ -84,7 +84,7 @@ class ApiService {
       if (baseUrl.includes('crim.gexisun.com')) {
         url = `${baseUrl}/pieces/${pieceId}/musicxml`;
       } else {
-        // 开发环境：直接访问FastAPI
+        // 开发环境：直接访问Flask API
         url = `${baseUrl}/pieces/${pieceId}/musicxml`;
       }
       
