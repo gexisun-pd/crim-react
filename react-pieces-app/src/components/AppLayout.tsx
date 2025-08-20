@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Music, FileText, TestTube } from 'lucide-react';
+import { Disc, Eye, TestTube } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -64,8 +64,7 @@ const AppContent: React.FC = () => {
       <Sidebar collapsible="icon">
         <SidebarHeader>
           <div className="flex items-center gap-2 px-4 py-2">
-            <Music className="h-6 w-6 text-primary" />
-            {state === 'expanded' && <h1 className="text-lg font-semibold">Music Analysis</h1>}
+            <Disc className="h-6 w-6 text-black" />
           </div>
         </SidebarHeader>
         <SidebarContent>
@@ -81,7 +80,7 @@ const AppContent: React.FC = () => {
                           onClick={() => handleViewChange('piece-viewer')}
                           isActive={currentView === 'piece-viewer'}
                         >
-                          <FileText className="h-4 w-4" />
+                          <Eye className="h-4 w-4" />
                           {state === 'expanded' && <span>Piece Viewer</span>}
                         </SidebarMenuButton>
                       </TooltipTrigger>
@@ -133,7 +132,7 @@ const AppContent: React.FC = () => {
 
 const AppLayout: React.FC = () => {
   return (
-    <SidebarProvider defaultOpen={true}>
+    <SidebarProvider defaultOpen={false}>
       <AppContent />
     </SidebarProvider>
   );

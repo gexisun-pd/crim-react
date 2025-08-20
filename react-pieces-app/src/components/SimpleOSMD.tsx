@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
+import { Loader2 } from 'lucide-react';
 import { Piece } from '../types';
 
 interface SimpleOSMDProps {
@@ -11,6 +12,7 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [osmd, setOsmd] = useState<OpenSheetMusicDisplay | null>(null);
   const [status, setStatus] = useState<string>('Initializing...');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     const initAndLoad = async () => {
@@ -59,6 +61,20 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
 
     const loadScore = async () => {
       try {
+        setIsLoading(true);
+        
+        // Clear previous score content
+        if (containerRef.current) {
+          const svgElements = containerRef.current.querySelectorAll('svg');
+          svgElements.forEach(svg => {
+            try {
+              svg.remove();
+            } catch (e) {
+              console.log('Error removing SVG:', e);
+            }
+          });
+        }
+        
         setStatus('Loading MusicXML from API...');
         const response = await fetch(`http://localhost:5000/api/pieces/${piece.id}/musicxml`);
         
@@ -72,6 +88,7 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
         await osmd.load(musicXML);
         await osmd.render();
         setStatus('Score rendered successfully!');
+        setIsLoading(false);
         
         // 添加点击事件监听器
         if (onNoteClick) {
@@ -81,10 +98,37 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
       } catch (error) {
         console.error('Loading Error:', error);
         setStatus('Error loading score: ' + (error as Error).message);
+        setIsLoading(false);
       }
     };
 
     loadScore();
+
+    // Cleanup function for when piece changes
+    return () => {
+      setIsLoading(false);
+      // Clean up event listeners
+      const svg = containerRef.current?.querySelector('svg');
+      if (svg) {
+        const existingHandler = (svg as any)._osmdClickHandler;
+        if (existingHandler) {
+          svg.removeEventListener('click', existingHandler);
+        }
+        
+        const noteElements = svg.querySelectorAll('[id*="note"], [id*="vf-"], [class*="note"]');
+        noteElements.forEach(el => {
+          const existingEnterHandler = (el as any)._osmdEnterHandler;
+          const existingLeaveHandler = (el as any)._osmdLeaveHandler;
+          
+          if (existingEnterHandler) {
+            el.removeEventListener('mouseenter', existingEnterHandler);
+          }
+          if (existingLeaveHandler) {
+            el.removeEventListener('mouseleave', existingLeaveHandler);
+          }
+        });
+      }
+    };
   }, [osmd, piece]);
 
   const addClickListeners = () => {
@@ -391,15 +435,6 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
     }
   };  return (
     <div style={{ padding: '20px' }}>
-      <div style={{ 
-        padding: '10px', 
-        backgroundColor: '#f8f9fa', 
-        marginBottom: '10px',
-        borderRadius: '4px'
-      }}>
-        <strong>Status:</strong> {status}
-      </div>
-      
       <div 
         ref={containerRef}
         style={{ 

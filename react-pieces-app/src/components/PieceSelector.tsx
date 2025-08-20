@@ -1,13 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiService } from '../services/api';
 import { Piece } from '../types';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from './ui/select';
+import { Combobox, ComboboxOption } from './ui/combobox';
 
 interface PieceSelectorProps {
   onPieceSelect?: (piece: Piece | null) => void;
@@ -47,6 +41,13 @@ const PieceSelector: React.FC<PieceSelectorProps> = ({ onPieceSelect }) => {
     onPieceSelect?.(selectedPiece || null);
   };
 
+  // Convert pieces to combobox options
+  const comboboxOptions: ComboboxOption[] = pieces.map((piece) => ({
+    value: piece.id.toString(),
+    label: piece.title,
+    description: `${piece.composer} • ${piece.filename}`
+  }));
+
   if (loading) {
     return <div className="text-sm text-muted-foreground">Loading pieces...</div>;
   }
@@ -64,30 +65,15 @@ const PieceSelector: React.FC<PieceSelectorProps> = ({ onPieceSelect }) => {
       <label className="text-sm font-medium mb-2 block">
         Select a Piece
       </label>
-      <Select value={selectedPieceId} onValueChange={handleValueChange}>
-        <SelectTrigger>
-          <SelectValue placeholder="Choose a musical piece..." />
-        </SelectTrigger>
-        <SelectContent>
-          {pieces.map((piece) => (
-            <SelectItem key={piece.id} value={piece.id.toString()}>
-              <div className="flex flex-col">
-                <span className="font-medium">{piece.title}</span>
-                <span className="text-xs text-muted-foreground">
-                  {piece.composer} • {piece.filename}
-                </span>
-              </div>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      
-      {selectedPieceId && (
-        <div className="mt-2 p-2 bg-muted rounded text-sm">
-          <strong>Selected:</strong>{' '}
-          {pieces.find(p => p.id.toString() === selectedPieceId)?.title}
-        </div>
-      )}
+      <Combobox
+        options={comboboxOptions}
+        value={selectedPieceId}
+        onSelect={handleValueChange}
+        placeholder="Choose a musical piece..."
+        emptyText="No pieces found."
+        searchPlaceholder="Search pieces..."
+        className="w-full"
+      />
     </div>
   );
 };
