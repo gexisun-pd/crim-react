@@ -68,7 +68,7 @@ const PieceViewer: React.FC = () => {
           </div>
 
           {/* Middle Panel - Score Display */}
-          <div className="col-span-7 bg-card rounded-lg border overflow-y-auto">
+          <div className="col-span-8 bg-card rounded-lg border overflow-y-auto">
             <SimpleOSMD 
               piece={selectedPiece} 
               onNoteClick={handleNoteClick}
@@ -76,7 +76,7 @@ const PieceViewer: React.FC = () => {
           </div>
 
           {/* Right Panel - Note Analysis */}
-          <div className="col-span-3 bg-card rounded-lg border p-3 overflow-y-auto">
+          <div className="col-span-2 bg-card rounded-lg border p-3 overflow-y-auto">
             <NoteAnalyzer 
               piece={selectedPiece}
               osmdNoteInfo={osmdNoteInfo}

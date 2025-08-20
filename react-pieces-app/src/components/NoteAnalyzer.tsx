@@ -26,6 +26,7 @@ interface DatabaseNote {
   type: string | null;
   staff: number | null;
   tie: string | null;
+  is_entry: boolean | null;
 }
 
 interface AnalysisResult {
@@ -247,32 +248,12 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
             <span className="font-mono text-xs">{note.note_id}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">piece_id:</span>
-            <span className="font-mono text-xs">{note.piece_id}</span>
-          </div>
-          <div className="flex justify-between">
             <span className="text-muted-foreground">note_set_id:</span>
             <span className="font-mono text-xs">{note.note_set_id}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">voice:</span>
-            <span className="text-xs">{note.voice}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">voice_name:</span>
-            <span className="text-xs">{note.voice_name || 'null'}</span>
-          </div>
-          <div className="flex justify-between">
             <span className="text-muted-foreground">onset:</span>
             <span className="font-mono text-xs">{note.onset}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">duration:</span>
-            <span className="font-mono text-xs">{note.duration || 'null'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">offset:</span>
-            <span className="font-mono text-xs">{note.offset || 'null'}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">measure:</span>
@@ -283,36 +264,20 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
             <span className="font-mono text-xs">{note.beat}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">pitch:</span>
-            <span className="text-xs">{note.pitch || 'null'}</span>
+            <span className="text-muted-foreground">duration:</span>
+            <span className="font-mono text-xs">{note.duration || 'null'}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">name:</span>
             <span className="text-xs">{note.name || 'null'}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">step:</span>
-            <span className="text-xs">{note.step || 'null'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">octave:</span>
-            <span className="text-xs">{note.octave || 'null'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">alter:</span>
-            <span className="text-xs">{note.alter || 'null'}</span>
-          </div>
-          <div className="flex justify-between">
             <span className="text-muted-foreground">type:</span>
             <span className="text-xs">{note.type || 'null'}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">staff:</span>
-            <span className="text-xs">{note.staff || 'null'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">tie:</span>
-            <span className="text-xs">{note.tie || 'null'}</span>
+            <span className="text-muted-foreground">is_entry:</span>
+            <span className="text-xs">{note.is_entry !== null ? (note.is_entry ? 'true' : 'false') : 'null'}</span>
           </div>
         </div>
       </div>
@@ -352,33 +317,17 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
               
               <div className="space-y-2">
                 {ngramData.melodic_ngrams.map((ngramSet, setIndex) => (
-                  <div key={ngramSet.melodic_ngram_set_id} className="p-2 bg-white border rounded">
-                    <h6 className="font-medium text-xs text-indigo-700 mb-1">
-                      {ngramSet.ngram_set_slug} - {ngramSet.interval_kind} ({ngramSet.ngrams_number}-grams)
-                    </h6>
-                    <div className="text-xs text-gray-600 mb-1">
-                      Set ID: {ngramSet.melodic_ngram_set_id} | 
-                      Combine Unisons: {ngramSet.combine_unisons ? 'Yes' : 'No'} |
-                      Note Set: {ngramSet.note_set_slug}
-                    </div>
-                    
-                    <div className="space-y-1">
-                      {ngramSet.ngrams.map((ngram, ngramIndex) => (
-                        <div key={ngram.ngram_id} className="flex justify-between items-center p-1 bg-gray-50 rounded">
-                          <div className="flex-1">
-                            <span className="font-mono text-xs font-medium text-blue-600">
-                              {ngram.ngram}
-                            </span>
-                            <span className="text-gray-500 text-xs ml-2">
-                              (Length: {ngram.ngram_length})
-                            </span>
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            ID: {ngram.ngram_id} | Voice: {ngram.voice} | Onset: {ngram.onset}
-                          </div>
+                  <div key={ngramSet.melodic_ngram_set_id} className="space-y-1">
+                    {ngramSet.ngrams.map((ngram, ngramIndex) => (
+                      <div key={ngram.ngram_id} className="p-2 bg-white border rounded">
+                        <div className="font-mono text-black">
+                          {ngram.ngram}
                         </div>
-                      ))}
-                    </div>
+                        <div className="text-xs text-gray-500">
+                          {ngramSet.ngram_set_slug}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
