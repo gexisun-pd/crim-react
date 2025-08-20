@@ -57,9 +57,9 @@ async def root():
             "redoc": "/redoc"
         },
         "endpoints": {
-            "pieces": "/api/pieces",
-            "piece_by_id": "/api/pieces/{id}",
-            "note_sets": "/api/note-sets",
+            "pieces": "/pieces",
+            "piece_by_id": "/pieces/{id}",
+            "note_sets": "/note-sets",
             "health": "/health"
         }
     }
@@ -73,7 +73,7 @@ except ImportError as e:
     pieces_bp = None
 
 # API路由 - 重新实现现有功能
-@app.get("/api/pieces")
+@app.get("/pieces")
 async def get_all_pieces():
     """获取所有音乐作品"""
     try:
@@ -83,7 +83,7 @@ async def get_all_pieces():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取作品列表失败: {str(e)}")
 
-@app.get("/api/pieces/{piece_id}")
+@app.get("/pieces/{piece_id}")
 async def get_piece_by_id(piece_id: int):
     """根据ID获取特定音乐作品"""
     try:
@@ -97,7 +97,7 @@ async def get_piece_by_id(piece_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取作品失败: {str(e)}")
 
-@app.get("/api/note-sets")
+@app.get("/note-sets")
 async def get_all_note_sets():
     """获取所有音符集合"""
     try:
@@ -107,7 +107,7 @@ async def get_all_note_sets():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取音符集合失败: {str(e)}")
 
-@app.get("/api/pieces/{piece_id}/notes")
+@app.get("/pieces/{piece_id}/notes")
 async def get_piece_notes(piece_id: int, note_set_id: int = 1):
     """获取作品的音符数据"""
     try:
@@ -117,7 +117,7 @@ async def get_piece_notes(piece_id: int, note_set_id: int = 1):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取音符数据失败: {str(e)}")
 
-@app.get("/api/pieces/{piece_id}/musicxml")
+@app.get("/pieces/{piece_id}/musicxml")
 async def get_piece_musicxml(piece_id: int):
     """获取作品的MusicXML文件"""
     try:

@@ -19,10 +19,16 @@ export const getApiBaseUrl = (): string => {
     console.log('API Config - Current protocol:', protocol);
     console.log('API Config - Full location:', window.location.href);
     
-    // 始终使用与前端相同的主机，但端口9000用于API
-    const apiUrl = `${protocol}//${hostname}:9000`;
-    console.log('API Config - 计算出的API URL:', apiUrl);
+    // 生产环境：使用nginx代理的API路径
+    if (hostname === 'crim.gexisun.com') {
+      const apiUrl = `${protocol}//${hostname}/api`;
+      console.log('API Config - 生产环境API URL:', apiUrl);
+      return apiUrl;
+    }
     
+    // 开发环境或IP访问：使用直接端口
+    const apiUrl = `${protocol}//${hostname}:9000`;
+    console.log('API Config - 开发环境API URL:', apiUrl);
     return apiUrl;
   }
   
