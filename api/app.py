@@ -32,8 +32,8 @@ def create_app():
         response.headers.add('Access-Control-Allow-Credentials', 'false')
         return response
     
-    # Register blueprints
-    app.register_blueprint(pieces_bp, url_prefix='/api')
+    # Register blueprints - 移除/api前缀，让nginx处理路径重写
+    app.register_blueprint(pieces_bp)
     
     # Health check endpoint
     @app.route('/health')
@@ -47,9 +47,11 @@ def create_app():
             "message": "Pieces Analysis API",
             "version": "1.0.0",
             "endpoints": [
-                "/api/pieces",
-                "/api/pieces/<int:piece_id>",
-                "/api/note-sets",
+                "/pieces",
+                "/pieces/<int:piece_id>",
+                "/pieces/<int:piece_id>/notes", 
+                "/pieces/<int:piece_id>/musicxml",
+                "/note-sets",
                 "/health"
             ]
         })
