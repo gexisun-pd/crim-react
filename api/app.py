@@ -14,13 +14,14 @@ def create_app():
     """Create and configure Flask application"""
     app = Flask(__name__)
     
-    # Enable CORS for React frontend
-    CORS(app, origins=[
-        'http://localhost:9173',  # Development
-        'http://127.0.0.1:9173',  # Development
-        'http://localhost:9174',  # Preview
-        'http://127.0.0.1:9174'   # Preview
-    ])
+    # Enable CORS for React frontend with proper configuration
+    # Allow all origins in development for local network access
+    CORS(app, 
+         origins="*",  # Allow all origins for development
+         supports_credentials=False,  # Set to False when using origins="*"
+         allow_headers=['Content-Type', 'Authorization', 'Accept'],
+         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+    )
     
     # Register blueprints
     app.register_blueprint(pieces_bp, url_prefix='/api')

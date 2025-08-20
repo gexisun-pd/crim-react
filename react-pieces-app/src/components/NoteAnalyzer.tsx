@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Piece } from '../types';
+import { apiService } from '../services/api';
+import { getApiBaseUrl } from '../config/api';
 
 interface NoteAnalyzerProps {
   piece: Piece | null;
@@ -106,7 +108,7 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
     setError(null);
 
     try {
-      const searchResponse = await fetch(`http://localhost:9000/api/pieces/${piece.id}/notes/search-by-osmd`, {
+      const searchResponse = await fetch(`${getApiBaseUrl()}/api/pieces/${piece.id}/notes/search-by-osmd`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -136,7 +138,7 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
         
         if (noteIds.length > 0) {
           try {
-            const ngramsResponse = await fetch(`http://localhost:9000/api/notes/batch-melodic-ngrams`, {
+            const ngramsResponse = await fetch(`${getApiBaseUrl()}/api/notes/batch-melodic-ngrams`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',

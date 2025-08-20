@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
+import { getApiBaseUrl } from '../config/api';
 
 const OSMDTest: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -123,7 +124,7 @@ const OSMDTest: React.FC = () => {
 
     try {
       setStatus('Loading real MusicXML from API...');
-      const response = await fetch('http://localhost:9000/api/pieces/1/musicxml');
+      const response = await fetch(`${getApiBaseUrl()}/api/pieces/1/musicxml`);
       
       if (!response.ok) {
         throw new Error(`API Error: ${response.status}`);

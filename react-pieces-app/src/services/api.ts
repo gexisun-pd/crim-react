@@ -1,11 +1,13 @@
 import { Piece, NoteSet, Note, ApiResponse } from '../types';
-
-const API_BASE_URL = 'http://localhost:9000/api';
+import { getApiBaseUrl, getHealthCheckUrl } from '../config/api';
 
 class ApiService {
+  private get apiBaseUrl(): string {
+    return `${getApiBaseUrl()}/api`;
+  }
   private async request<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`);
+      const response = await fetch(`${this.apiBaseUrl}${endpoint}`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -40,7 +42,7 @@ class ApiService {
 
   async checkHealth(): Promise<ApiResponse<{ status: string; service: string }>> {
     try {
-      const response = await fetch('http://localhost:9000/health');
+      const response = await fetch(getHealthCheckUrl());
       const data = await response.json();
       return {
         success: response.ok,
@@ -56,7 +58,7 @@ class ApiService {
 
   async getPieceMusicXML(pieceId: number): Promise<string | null> {
     try {
-      const response = await fetch(`${API_BASE_URL}/pieces/${pieceId}/musicxml`);
+      const response = await fetch(`${this.apiBaseUrl}/pieces/${pieceId}/musicxml`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
