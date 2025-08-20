@@ -431,19 +431,8 @@ const NoteAnalyzer: React.FC<NoteAnalyzerProps> = ({
         </div>
       )}
 
-      {/* Search Criteria */}
-      {analysisResult?.search_criteria && (
-        <div className="p-2 bg-gray-50 rounded text-xs">
-          <h5 className="font-medium mb-1">Search Criteria</h5>
-          <div className="space-y-1">
-            <div>Measure: <code className="text-xs">{analysisResult.search_criteria.measure}</code></div>
-            <div>Beat: <code className="text-xs">{analysisResult.search_criteria.beat}</code></div>
-            <div>Part: <code className="text-xs">{analysisResult.search_criteria.part_id || analysisResult.search_criteria.voice}</code></div>
-            <div>Search Type: <code className="text-xs">Position-based match</code></div>
-          </div>
-        </div>
-      )}
-
+      {/* Search Criteria - Hidden from display */}
+      
       {/* Melodic N-grams */}
       {analysisResult?.melodic_ngrams && renderMelodicNgrams(analysisResult.melodic_ngrams)}
 

@@ -143,33 +143,25 @@ const OSMDTest: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: '20px' }}>
-      <h2>OSMD Test Component</h2>
-      <p>Status: {status}</p>
-      <button 
-        onClick={loadRealMusicXML}
-        disabled={!osmd}
-        style={{ 
-          padding: '10px 20px', 
-          marginBottom: '20px',
-          backgroundColor: osmd ? '#007bff' : '#ccc',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: osmd ? 'pointer' : 'not-allowed'
-        }}
-      >
-        Load Real MusicXML
-      </button>
-      <div 
-        ref={containerRef}
-        style={{ 
-          border: '1px solid #ddd', 
-          minHeight: '400px', 
-          backgroundColor: 'white',
-          padding: '10px'
-        }}
-      />
+    <div className="h-full bg-background p-4">
+      <div className="max-w-full mx-auto h-full">
+        <div className="mb-4">
+          <h1 className="text-2xl font-bold text-foreground mb-2">OSMD Test Component</h1>
+          <p className="text-muted-foreground">Status: {status}</p>
+          <button 
+            onClick={loadRealMusicXML}
+            disabled={!osmd}
+            className="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Load Real MusicXML
+          </button>
+        </div>
+        
+        <div 
+          ref={containerRef}
+          className="border rounded-lg bg-white p-4 h-[calc(100vh-200px)] overflow-auto"
+        />
+      </div>
     </div>
   );
 };
