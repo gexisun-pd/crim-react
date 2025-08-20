@@ -7,16 +7,27 @@ class ApiService {
   }
   private async request<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
-      const response = await fetch(`${this.apiBaseUrl}${endpoint}`);
+      const url = `${this.apiBaseUrl}${endpoint}`;
+      console.log('API Request URL:', url);
+      
+      const response = await fetch(url);
+      console.log('API Response status:', response.status);
+      console.log('API Response headers:', response.headers);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
+      console.log('API Response data:', data);
       return data;
     } catch (error) {
       console.error('API request failed:', error);
+      console.error('Request details:', {
+        endpoint,
+        apiBaseUrl: this.apiBaseUrl,
+        fullUrl: `${this.apiBaseUrl}${endpoint}`
+      });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred'

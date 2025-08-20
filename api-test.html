@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API连接测试</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        button { padding: 15px 20px; margin: 10px; font-size: 16px; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 5px; overflow: auto; }
+    </style>
+</head>
+<body>
+    <h1>API连接测试</h1>
+    <p>当前访问地址: <span id="currentUrl"></span></p>
+    
+    <button onclick="testDirect()">直接测试API</button>
+    <button onclick="testCORS()">测试CORS</button>
+    <button onclick="testFromDifferentOrigin()">跨域测试</button>
+    
+    <h3>测试结果:</h3>
+    <pre id="results">点击按钮开始测试...</pre>
+
+    <script>
+        document.getElementById('currentUrl').textContent = window.location.href;
+        
+        function log(message) {
+            const results = document.getElementById('results');
+            results.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+        }
+
+        async function testDirect() {
+            log('=== 直接API测试 ===');
+            const hostname = window.location.hostname;
+            const apiUrl = `http://${hostname}:9000/api/pieces`;
+            log(`测试URL: ${apiUrl}`);
+            
+            try {
+                const response = await fetch(apiUrl);
+                log(`响应状态: ${response.status}`);
+                log(`响应头: ${JSON.stringify([...response.headers.entries()])}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`响应数据: ${JSON.stringify(data, null, 2).substring(0, 500)}...`);
+                } else {
+                    log(`HTTP错误: ${response.status} ${response.statusText}`);
+                }
+            } catch (error) {
+                log(`网络错误: ${error.message}`);
+                log(`错误类型: ${error.name}`);
+                log(`完整错误: ${JSON.stringify(error, null, 2)}`);
+            }
+        }
+
+        async function testCORS() {
+            log('=== CORS测试 ===');
+            const hostname = window.location.hostname;
+            const apiUrl = `http://${hostname}:9000/health`;
+            
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                log(`CORS响应状态: ${response.status}`);
+                const data = await response.json();
+                log(`CORS响应数据: ${JSON.stringify(data)}`);
+            } catch (error) {
+                log(`CORS错误: ${error.message}`);
+            }
+        }
+
+        async function testFromDifferentOrigin() {
+            log('=== 网络连接测试 ===');
+            const hostname = window.location.hostname;
+            
+            // 测试不同的连接方式
+            const testUrls = [
+                `http://${hostname}:9000/health`,
+                `http://localhost:9000/health`,
+                `http://127.0.0.1:9000/health`,
+            ];
+            
+            for (const url of testUrls) {
+                try {
+                    log(`测试: ${url}`);
+                    const response = await fetch(url, { 
+                        mode: 'cors',
+                        method: 'GET' 
+                    });
+                    log(`  ✓ 成功: ${response.status}`);
+                } catch (error) {
+                    log(`  ✗ 失败: ${error.message}`);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

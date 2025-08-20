@@ -14,14 +14,23 @@ def create_app():
     """Create and configure Flask application"""
     app = Flask(__name__)
     
-    # Enable CORS for React frontend with proper configuration
-    # Allow all origins in development for local network access
+    # Enable CORS for React frontend with comprehensive configuration
     CORS(app, 
          origins="*",  # Allow all origins for development
          supports_credentials=False,  # Set to False when using origins="*"
-         allow_headers=['Content-Type', 'Authorization', 'Accept'],
-         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+         allow_headers=['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+         max_age=3600  # Cache preflight requests for 1 hour
     )
+    
+    # Add custom CORS headers for better compatibility
+    @app.after_request
+    def after_request(response):
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,Accept,Origin,X-Requested-With')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        response.headers.add('Access-Control-Allow-Credentials', 'false')
+        return response
     
     # Register blueprints
     app.register_blueprint(pieces_bp, url_prefix='/api')

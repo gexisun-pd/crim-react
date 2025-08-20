@@ -1,22 +1,33 @@
 // API configuration utility for Create React App
 export const getApiBaseUrl = (): string => {
-  // If environment variable is set, use it
-  if (process.env.REACT_APP_API_BASE_URL) {
-    return process.env.REACT_APP_API_BASE_URL;
+  // 检查环境变量
+  const envUrl = process.env.REACT_APP_API_BASE_URL;
+  console.log('环境变量 REACT_APP_API_BASE_URL:', envUrl);
+  
+  // 如果环境变量明确设置且不为空，使用它
+  if (envUrl && envUrl.trim() !== '') {
+    console.log('使用环境变量URL:', envUrl);
+    return envUrl;
   }
   
-  // For local network access, try to determine the API server URL dynamically
-  // If accessing via IP address, use the same IP for API calls
+  // 动态检测API URL
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
     
-    // If accessing via IP address (not localhost), use same IP for API
-    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      return `http://${hostname}:9000`;
-    }
+    console.log('API Config - Current hostname:', hostname);
+    console.log('API Config - Current protocol:', protocol);
+    console.log('API Config - Full location:', window.location.href);
+    
+    // 始终使用与前端相同的主机，但端口9000用于API
+    const apiUrl = `${protocol}//${hostname}:9000`;
+    console.log('API Config - 计算出的API URL:', apiUrl);
+    
+    return apiUrl;
   }
   
-  // Default fallback
+  // 服务器端渲染回退
+  console.log('使用服务器端回退URL: http://localhost:9000');
   return 'http://localhost:9000';
 };
 

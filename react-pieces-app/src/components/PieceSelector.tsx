@@ -17,16 +17,26 @@ const PieceSelector: React.FC<PieceSelectorProps> = ({ onPieceSelect }) => {
     const loadPieces = async () => {
       try {
         setLoading(true);
-        const response = await apiService.getAllPieces();
+        setError(null);
         
-        if (response.success && response.data) {
-          setPieces(response.data);
+        console.log('开始加载pieces数据...');
+        const response = await apiService.getAllPieces();
+        console.log('API响应:', response);
+        
+        if (response && response.success && response.data) {
+          console.log('成功获取pieces:', response.data.length, '个');
+          setPieces(Array.isArray(response.data) ? response.data : []);
         } else {
-          setError(response.error || 'Failed to load pieces');
+          const errorMsg = response?.error || 'API返回错误数据格式';
+          console.error('API错误:', errorMsg);
+          setError(errorMsg);
+          setPieces([]); // 确保pieces为空数组而不是undefined
         }
       } catch (error) {
-        setError('Error connecting to server');
-        console.error('Error fetching pieces:', error);
+        const errorMsg = 'API服务器连接失败 - 请确保API服务器在端口9000运行';
+        console.error('连接错误:', error);
+        setError(errorMsg);
+        setPieces([]); // 确保pieces为空数组
       } finally {
         setLoading(false);
       }
@@ -37,16 +47,18 @@ const PieceSelector: React.FC<PieceSelectorProps> = ({ onPieceSelect }) => {
 
   const handleValueChange = (value: string) => {
     setSelectedPieceId(value);
-    const selectedPiece = pieces.find(piece => piece.id.toString() === value);
+    const selectedPiece = pieces.find(piece => piece.id?.toString() === value);
     onPieceSelect?.(selectedPiece || null);
   };
 
-  // Convert pieces to combobox options
-  const comboboxOptions: ComboboxOption[] = pieces.map((piece) => ({
-    value: piece.id.toString(),
-    label: piece.title,
-    description: `${piece.composer} • ${piece.filename}`
-  }));
+  // Convert pieces to combobox options - with safety checks
+  const comboboxOptions: ComboboxOption[] = pieces
+    .filter((piece) => piece && piece.id && piece.title) // 过滤掉无效数据
+    .map((piece) => ({
+      value: piece.id.toString(),
+      label: piece.title || 'Untitled',
+      description: `${piece.composer || 'Unknown'} • ${piece.filename || 'Unknown file'}`
+    }));
 
   if (loading) {
     return <div className="text-sm text-muted-foreground">Loading pieces...</div>;
