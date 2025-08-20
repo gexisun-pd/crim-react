@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
+import { Button } from './ui/button';
 import { Piece } from '../types';
 
 interface SimpleOSMDProps {
@@ -11,6 +12,7 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [osmd, setOsmd] = useState<OpenSheetMusicDisplay | null>(null);
   const [status, setStatus] = useState<string>('Initializing...');
+  const [zoom, setZoom] = useState<number>(0.67);
 
   useEffect(() => {
     const initAndLoad = async () => {
@@ -70,6 +72,8 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
         setStatus('MusicXML loaded, rendering...');
         
         await osmd.load(musicXML);
+        // 设置默认缩放值
+        (osmd as any).zoom = zoom;
         await osmd.render();
         setStatus('Score rendered successfully!');
         
@@ -418,25 +422,78 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
       console.error('Error finding note with OSMD API:', error);
       return null;
     }
+  };
+
+  // 缩放控制函数
+  const handleZoomIn = () => {
+    if (!osmd) return;
+    const newZoom = zoom * 1.2;
+    setZoom(newZoom);
+    (osmd as any).zoom = newZoom; // 使用 any 类型来绕过 TypeScript 限制
+    osmd.render();
+    
+    // 重新添加点击事件监听器
+    if (onNoteClick) {
+      // 延迟执行以确保渲染完成
+      setTimeout(() => {
+        addClickListeners();
+      }, 100);
+    }
+  };
+
+  const handleZoomOut = () => {
+    if (!osmd) return;
+    const newZoom = zoom / 1.2;
+    setZoom(newZoom);
+    (osmd as any).zoom = newZoom; // 使用 any 类型来绕过 TypeScript 限制
+    osmd.render();
+    
+    // 重新添加点击事件监听器
+    if (onNoteClick) {
+      // 延迟执行以确保渲染完成
+      setTimeout(() => {
+        addClickListeners();
+      }, 100);
+    }
   };  return (
-    <div style={{ padding: '20px' }}>
-      <div style={{ 
-        padding: '10px', 
-        backgroundColor: '#f8f9fa', 
-        marginBottom: '10px',
-        borderRadius: '4px'
-      }}>
-        <strong>Status:</strong> {status}
+    <div className="p-5">
+      {/* Status and Zoom Controls in same row */}
+      <div className="flex justify-between items-center p-3 bg-muted mb-3 rounded">
+        <div>
+          <strong>Status:</strong> {status}
+        </div>
+        
+        {/* Zoom Controls */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleZoomOut}
+            disabled={!osmd}
+            title="Zoom Out"
+          >
+            −
+          </Button>
+          
+          <span className="min-w-[60px] text-center font-bold text-sm">
+            {Math.round(zoom * 100)}%
+          </span>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleZoomIn}
+            disabled={!osmd}
+            title="Zoom In"
+          >
+            +
+          </Button>
+        </div>
       </div>
       
       <div 
         ref={containerRef}
-        style={{ 
-          border: '1px solid #ddd', 
-          minHeight: '400px', 
-          backgroundColor: 'white',
-          padding: '10px'
-        }}
+        className="border border-border min-h-[400px] bg-white p-3 rounded"
       />
     </div>
   );
