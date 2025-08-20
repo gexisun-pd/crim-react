@@ -3,7 +3,15 @@ import { getApiBaseUrl, getHealthCheckUrl } from '../config/api';
 
 class ApiService {
   private get apiBaseUrl(): string {
-    return `${getApiBaseUrl()}/api`;
+    const baseUrl = getApiBaseUrl();
+    
+    // 生产环境：nginx已经添加了/api前缀，直接使用
+    if (baseUrl.includes('crim.gexisun.com')) {
+      return baseUrl;
+    }
+    
+    // 开发环境：直接连接到FastAPI服务器，不需要/api前缀
+    return baseUrl;
   }
   private async request<T>(endpoint: string): Promise<ApiResponse<T>> {
     try {
@@ -69,7 +77,18 @@ class ApiService {
 
   async getPieceMusicXML(pieceId: number): Promise<string | null> {
     try {
-      const response = await fetch(`${this.apiBaseUrl}/pieces/${pieceId}/musicxml`);
+      const baseUrl = getApiBaseUrl();
+      let url: string;
+      
+      // 生产环境：使用nginx代理路径
+      if (baseUrl.includes('crim.gexisun.com')) {
+        url = `${baseUrl}/pieces/${pieceId}/musicxml`;
+      } else {
+        // 开发环境：直接访问FastAPI
+        url = `${baseUrl}/pieces/${pieceId}/musicxml`;
+      }
+      
+      const response = await fetch(url);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

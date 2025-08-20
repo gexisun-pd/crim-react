@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { OpenSheetMusicDisplay } from 'opensheetmusicdisplay';
 import { Button } from './ui/button';
 import { Piece } from '../types';
+import { apiService } from '../services/api';
 
 interface SimpleOSMDProps {
   piece: Piece | null;
@@ -62,13 +63,12 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
     const loadScore = async () => {
       try {
         setStatus('Loading MusicXML from API...');
-        const response = await fetch(`http://localhost:9000/api/pieces/${piece.id}/musicxml`);
+        const musicXML = await apiService.getPieceMusicXML(piece.id);
         
-        if (!response.ok) {
-          throw new Error(`API Error: ${response.status}`);
+        if (!musicXML) {
+          throw new Error('Failed to load MusicXML');
         }
         
-        const musicXML = await response.text();
         setStatus('MusicXML loaded, rendering...');
         
         await osmd.load(musicXML);
