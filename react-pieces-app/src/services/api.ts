@@ -1,6 +1,6 @@
 import { Piece, NoteSet, Note, ApiResponse } from '../types';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:9000/api';
 
 class ApiService {
   private async request<T>(endpoint: string): Promise<ApiResponse<T>> {
@@ -40,7 +40,7 @@ class ApiService {
 
   async checkHealth(): Promise<ApiResponse<{ status: string; service: string }>> {
     try {
-      const response = await fetch('http://localhost:5000/health');
+      const response = await fetch('http://localhost:9000/health');
       const data = await response.json();
       return {
         success: response.ok,

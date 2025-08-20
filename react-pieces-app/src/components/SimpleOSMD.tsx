@@ -62,7 +62,7 @@ const SimpleOSMD: React.FC<SimpleOSMDProps> = ({ piece, onNoteClick }) => {
     const loadScore = async () => {
       try {
         setStatus('Loading MusicXML from API...');
-        const response = await fetch(`http://localhost:5000/api/pieces/${piece.id}/musicxml`);
+        const response = await fetch(`http://localhost:9000/api/pieces/${piece.id}/musicxml`);
         
         if (!response.ok) {
           throw new Error(`API Error: ${response.status}`);

@@ -15,7 +15,7 @@ def create_app():
     app = Flask(__name__)
     
     # Enable CORS for React frontend
-    CORS(app, origins=['http://localhost:3000', 'http://127.0.0.1:3000'])
+    CORS(app, origins=['http://localhost:9173', 'http://127.0.0.1:9173'])
     
     # Register blueprints
     app.register_blueprint(pieces_bp, url_prefix='/api')
@@ -43,4 +43,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=9000)

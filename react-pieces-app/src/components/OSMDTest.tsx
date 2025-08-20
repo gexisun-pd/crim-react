@@ -123,7 +123,7 @@ const OSMDTest: React.FC = () => {
 
     try {
       setStatus('Loading real MusicXML from API...');
-      const response = await fetch('http://localhost:5000/api/pieces/1/musicxml');
+      const response = await fetch('http://localhost:9000/api/pieces/1/musicxml');
       
       if (!response.ok) {
         throw new Error(`API Error: ${response.status}`);
