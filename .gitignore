@@ -4,7 +4,7 @@ venv/
 env/
 
 # Data files
-data/
+data/crim_cache/
 
 # Database files
 database/analysis.db
