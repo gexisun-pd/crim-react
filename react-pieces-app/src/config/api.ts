@@ -20,7 +20,7 @@ export const getApiBaseUrl = (): string => {
     console.log('API Config - Full location:', window.location.href);
     
     // 生产环境：使用nginx代理的API路径
-    if (hostname === 'crim.gexisun.com') {
+    if (hostname === 'tesi.gexisun.com') {
       const apiUrl = `${protocol}//${hostname}/api`;
       console.log('API Config - 生产环境API URL:', apiUrl);
       return apiUrl;

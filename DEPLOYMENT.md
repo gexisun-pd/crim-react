@@ -17,7 +17,7 @@
 ### 3. Flask CORS配置
 已更新`api/app.py`中的CORS配置，支持：
 - 开发环境: localhost:9173, localhost:9174
-- 生产环境: https://crim.gexisun.com, http://crim.gexisun.com
+- 生产环境: https://tesi.gexisun.com, http://tesi.gexisun.com
 
 ## 部署步骤
 
@@ -41,7 +41,7 @@ npm run preview
 使用提供的`nginx-config-example.conf`文件配置nginx，将域名映射到端口9174。
 
 ### 4. 测试配置
-- 访问 https://crim.gexisun.com 查看React应用
+- 访问 https://tesi.gexisun.com 查看React应用
 - API请求将自动使用localhost:9000（后端通信）
 - 跨域问题已解决
 

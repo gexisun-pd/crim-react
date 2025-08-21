@@ -6,7 +6,7 @@ class ApiService {
     const baseUrl = getApiBaseUrl();
     
     // 生产环境：nginx已经添加了/api前缀，直接使用
-    if (baseUrl.includes('crim.gexisun.com')) {
+    if (baseUrl.includes('tesi.gexisun.com')) {
       return baseUrl;
     }
     
@@ -81,7 +81,7 @@ class ApiService {
       let url: string;
       
       // 生产环境：使用nginx代理路径
-      if (baseUrl.includes('crim.gexisun.com')) {
+      if (baseUrl.includes('tesi.gexisun.com')) {
         url = `${baseUrl}/pieces/${pieceId}/musicxml`;
       } else {
         // 开发环境：直接访问Flask API
